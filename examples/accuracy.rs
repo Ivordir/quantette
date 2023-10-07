@@ -1,0 +1,550 @@
+#![deny(unsafe_code, unsafe_op_in_unsafe_fn)]
+#![warn(
+    clippy::use_debug,
+    clippy::dbg_macro,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unneeded_field_pattern,
+    clippy::rest_pat_in_fully_bound_structs,
+    clippy::unnecessary_self_imports,
+    clippy::str_to_string,
+    clippy::string_to_string,
+    clippy::string_slice
+)]
+
+use std::{
+    fmt::{self, Display},
+    path::PathBuf,
+};
+
+use clap::{Parser, ValueEnum};
+use image::{buffer::ConvertBuffer, RgbImage, RgbaImage};
+use palette::{IntoColor, Lab, LinSrgb, Oklab, Srgb};
+use quantette::{
+    dither::{Ditherer, FloydSteinberg},
+    kmeans, wu, ColorAndFrequency, ColorComponents, ColorSpace, PaletteSize, RemappableColorCounts,
+};
+use rayon::prelude::*;
+use rgb::{FromSlice, RGB8, RGBA};
+
+#[path = "../util/util.rs"]
+mod util;
+
+/// Set of algorithm choices to create a palette
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum Algorithm {
+    Minibatch,
+    Online,
+    Wu,
+    Neuquant,
+    Exoquant,
+    Imagequant,
+}
+
+impl Display for Algorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Algorithm::Minibatch => "minibatch",
+                Algorithm::Online => "online",
+                Algorithm::Wu => "wu",
+                Algorithm::Neuquant => "neuquant",
+                Algorithm::Imagequant => "imagequant",
+                Algorithm::Exoquant => "exoquant",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum CliColorSpace {
+    Srgb,
+    Lab,
+    Oklab,
+}
+
+impl Display for CliColorSpace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                CliColorSpace::Srgb => "srgb",
+                CliColorSpace::Lab => "lab",
+                CliColorSpace::Oklab => "oklab",
+            }
+        )
+    }
+}
+
+impl From<CliColorSpace> for ColorSpace {
+    fn from(value: CliColorSpace) -> Self {
+        match value {
+            CliColorSpace::Srgb => ColorSpace::Srgb,
+            CliColorSpace::Lab => ColorSpace::Lab,
+            CliColorSpace::Oklab => ColorSpace::Oklab,
+        }
+    }
+}
+
+#[derive(Parser)]
+struct Options {
+    #[arg(short, long, default_value_t = Algorithm::Wu)]
+    algo: Algorithm,
+
+    #[arg(short, long, default_value_t = CliColorSpace::Srgb)]
+    colorspace: CliColorSpace,
+
+    #[arg(short, long, default_value = "16,64,256", value_delimiter = ',', value_parser = parse_palette_size)]
+    k: Vec<PaletteSize>,
+
+    #[arg(long, default_value_t = 0.5)]
+    sampling_factor: f64,
+
+    #[arg(long, default_value_t = 4096)]
+    batch_size: u32,
+
+    #[arg(long, default_value_t = 0)]
+    seed: u64,
+
+    #[arg(long, default_value_t = 1)]
+    sample_frac: u8,
+
+    #[arg(long)]
+    kmeans_optimize: bool,
+
+    #[arg(long)]
+    dither: bool,
+
+    #[arg(long)]
+    dither_strength: Option<f64>,
+
+    images: Vec<PathBuf>,
+}
+
+fn parse_palette_size(s: &str) -> Result<PaletteSize, String> {
+    let value: u16 = s.parse().map_err(|e| format!("{e}"))?;
+    value.try_into().map_err(|e| format!("{e}"))
+}
+
+impl Options {
+    fn num_samples<Color, Component, const N: usize>(
+        &self,
+        color_counts: &impl ColorAndFrequency<Color, Component, N>,
+    ) -> u32
+    where
+        Color: ColorComponents<Component, N>,
+    {
+        (self.sampling_factor * f64::from(color_counts.num_colors())) as u32
+    }
+}
+
+const COL_WIDTH: usize = 10;
+const NUM_DECIMALS: usize = 4;
+
+fn main() {
+    let options = Options::parse();
+
+    let images = if options.images.is_empty() {
+        util::load_cq100_images()
+    } else {
+        util::load_images(&options.images)
+    };
+
+    // use char count as supplement for grapheme count
+    let max_name_len = images
+        .iter()
+        .map(|(name, _)| name.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    println!(
+        "{:max_name_len$} {}",
+        "image",
+        options
+            .k
+            .iter()
+            .map(|k| format!(
+                "{k:>0$} {1}",
+                COL_WIDTH - NUM_DECIMALS - 1,
+                str::repeat(" ", NUM_DECIMALS)
+            ))
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+
+    fn each_image<F1, F2>(
+        options: &Options,
+        images: Vec<(String, RgbImage)>,
+        name_len: usize,
+        mut f1: F1,
+    ) where
+        F1: FnMut(RgbImage) -> F2,
+        F2: FnMut(PaletteSize) -> Vec<RGB8>,
+    {
+        let ds = dssim::new();
+        for (path, image) in images {
+            let width = image.width() as usize;
+            let height = image.height() as usize;
+
+            let slice = image.as_flat_samples();
+            let slice = slice.image_slice().unwrap();
+
+            let original = ds.create_image_rgb(slice.as_rgb(), width, height).unwrap();
+
+            let mut f2 = f1(image);
+            let ssim_by_k = options
+                .k
+                .iter()
+                .map(|&k| {
+                    let quantized = ds.create_image_rgb(&f2(k), width, height).unwrap();
+                    let ssim = 100.0 * f64::from(ds.compare(&original, quantized).0);
+                    format!("{ssim:>COL_WIDTH$.NUM_DECIMALS$}")
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            println!("{path:name_len$} {ssim_by_k}");
+        }
+    }
+
+    fn each_image_color_counts<Color, Component, const N: usize>(
+        options: &Options,
+        images: Vec<(String, RgbImage)>,
+        name_len: usize,
+        convert_to: impl Fn(Srgb<u8>) -> Color + Sync,
+        convert_from: impl Fn(Color) -> Srgb<u8> + Copy,
+        f: impl Fn(&RemappableColorCounts<Color, Component, N>, PaletteSize) -> (Vec<Color>, Vec<u8>)
+            + Copy,
+    ) where
+        Color: ColorComponents<Component, N> + Send + Sync,
+        Component: Copy + Into<f64> + 'static,
+    {
+        each_image(options, images, name_len, |image| {
+            let color_counts =
+                RemappableColorCounts::remappable_try_from_rgbimage_par(&image, &convert_to)
+                    .unwrap();
+
+            move |k| {
+                let (colors, mut indices) = f(&color_counts, k);
+                if options.dither {
+                    FloydSteinberg(
+                        options
+                            .dither_strength
+                            .unwrap_or(FloydSteinberg::DEFAULT_STRENGTH),
+                    )
+                    .dither_indexed(
+                        &colors,
+                        &mut indices,
+                        color_counts.colors(),
+                        color_counts.indices(),
+                        image.width(),
+                        image.height(),
+                    )
+                }
+                let colors = colors.into_iter().map(convert_from).collect::<Vec<_>>();
+                indices
+                    .into_par_iter()
+                    .map(|i| colors[usize::from(i)].into_components().into())
+                    .collect()
+            }
+        });
+    }
+
+    fn each_image_color_counts_convert<Color, Component, const N: usize>(
+        options: &Options,
+        images: Vec<(String, RgbImage)>,
+        name_len: usize,
+        f: impl Fn(&RemappableColorCounts<Color, Component, N>, PaletteSize) -> (Vec<Color>, Vec<u8>)
+            + Copy,
+    ) where
+        Color: ColorComponents<Component, N> + Send + Sync,
+        LinSrgb: IntoColor<Color>,
+        Color: IntoColor<LinSrgb>,
+        Component: Copy + Into<f64> + 'static,
+    {
+        each_image_color_counts(
+            options,
+            images,
+            name_len,
+            |srgb| srgb.into_linear().into_color(),
+            |color| color.into_color().into_encoding(),
+            f,
+        )
+    }
+
+    match (options.algo, options.colorspace.into()) {
+        (Algorithm::Minibatch, ColorSpace::Srgb) => {
+            each_image_color_counts::<Srgb<u8>, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |srgb| srgb,
+                |srgb| srgb,
+                |color_counts, k| {
+                    let res = kmeans::quantize_par::<_, _, 3>(
+                        color_counts,
+                        options.num_samples(color_counts),
+                        options.batch_size,
+                        wu::palette_par(color_counts, k, &ColorSpace::default_binner_srgb_u8())
+                            .palette
+                            .try_into()
+                            .unwrap(),
+                        options.seed,
+                    );
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Minibatch, ColorSpace::Lab) => {
+            each_image_color_counts_convert::<Lab, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |color_counts, k| {
+                    let res = kmeans::quantize_par::<_, _, 3>(
+                        color_counts,
+                        options.num_samples(color_counts),
+                        options.batch_size,
+                        wu::palette_par(color_counts, k, &ColorSpace::default_binner_lab_f32())
+                            .palette
+                            .try_into()
+                            .unwrap(),
+                        options.seed,
+                    );
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Minibatch, ColorSpace::Oklab) => {
+            each_image_color_counts_convert::<Oklab, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |color_counts, k| {
+                    let res = kmeans::quantize_par::<_, _, 3>(
+                        color_counts,
+                        options.num_samples(color_counts),
+                        options.batch_size,
+                        wu::palette_par(color_counts, k, &ColorSpace::default_binner_oklab_f32())
+                            .palette
+                            .try_into()
+                            .unwrap(),
+                        options.seed,
+                    );
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Online, ColorSpace::Srgb) => {
+            each_image_color_counts::<Srgb<u8>, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |srgb| srgb,
+                |srgb| srgb,
+                |color_counts, k| {
+                    let res = kmeans::quantize::<_, _, 3>(
+                        color_counts,
+                        options.num_samples(color_counts),
+                        wu::palette(color_counts, k, &ColorSpace::default_binner_srgb_u8())
+                            .palette
+                            .try_into()
+                            .unwrap(),
+                        options.seed,
+                    );
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Online, ColorSpace::Lab) => {
+            each_image_color_counts_convert::<Lab, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |color_counts, k| {
+                    let res = kmeans::quantize::<_, _, 3>(
+                        color_counts,
+                        options.num_samples(color_counts),
+                        wu::palette(color_counts, k, &ColorSpace::default_binner_lab_f32())
+                            .palette
+                            .try_into()
+                            .unwrap(),
+                        options.seed,
+                    );
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Online, ColorSpace::Oklab) => {
+            each_image_color_counts_convert::<Oklab, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |color_counts, k| {
+                    let res = kmeans::quantize::<_, _, 3>(
+                        color_counts,
+                        options.num_samples(color_counts),
+                        wu::palette(color_counts, k, &ColorSpace::default_binner_oklab_f32())
+                            .palette
+                            .try_into()
+                            .unwrap(),
+                        options.seed,
+                    );
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Wu, ColorSpace::Srgb) => {
+            each_image_color_counts::<Srgb<u8>, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |srgb| srgb,
+                |srgb| srgb,
+                |image, k| {
+                    let res = wu::quantize(image, k, &ColorSpace::default_binner_srgb_u8());
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Wu, ColorSpace::Lab) => {
+            each_image_color_counts_convert::<Lab, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |color_counts, k| {
+                    let res = wu::quantize(color_counts, k, &ColorSpace::default_binner_lab_f32());
+                    (res.palette, res.indices)
+                },
+            );
+        }
+        (Algorithm::Wu, ColorSpace::Oklab) => {
+            each_image_color_counts_convert::<Oklab, _, 3>(
+                &options,
+                images,
+                max_name_len,
+                |color_counts, k| {
+                    let re = wu::quantize(color_counts, k, &ColorSpace::default_binner_oklab_f32());
+                    (re.palette, re.indices)
+                },
+            );
+        }
+        (Algorithm::Neuquant, ColorSpace::Srgb) => {
+            each_image(&options, images, max_name_len, |image| {
+                let image: RgbaImage = image.convert();
+
+                move |k| {
+                    let slice = image.as_flat_samples();
+                    let slice = slice.image_slice().unwrap();
+
+                    let nq = color_quant::NeuQuant::new(
+                        options.sample_frac.into(),
+                        k.into_inner().into(),
+                        slice,
+                    );
+
+                    let colors = nq
+                        .color_map_rgba()
+                        .as_rgba()
+                        .iter()
+                        .map(RGBA::rgb)
+                        .collect::<Vec<_>>();
+
+                    slice
+                        .chunks_exact(4)
+                        .map(|pix| colors[nq.index_of(pix)])
+                        .collect()
+                }
+            });
+        }
+        (Algorithm::Imagequant, ColorSpace::Srgb) => {
+            each_image(&options, images, max_name_len, |image| {
+                let image_rgba: RgbaImage = image.convert();
+
+                move |k| {
+                    let mut libq = imagequant::new();
+
+                    let mut img = libq
+                        .new_image(
+                            image_rgba.as_rgba(),
+                            image.width() as usize,
+                            image.height() as usize,
+                            0.0,
+                        )
+                        .unwrap();
+
+                    libq.set_max_colors(k.into_inner().into()).unwrap();
+
+                    let mut quantized = libq.quantize(&mut img).unwrap();
+                    if !options.dither {
+                        quantized.set_dithering_level(0.0).unwrap()
+                    };
+                    let (colors, indices) = quantized.remapped(&mut img).unwrap();
+
+                    indices
+                        .into_iter()
+                        .map(|i| colors[usize::from(i)].rgb())
+                        .collect()
+                }
+            });
+        }
+        (Algorithm::Exoquant, ColorSpace::Srgb) => {
+            each_image(&options, images, max_name_len, |image| {
+                let pixels = image
+                    .pixels()
+                    .map(|p| exoquant::Color::new(p.0[0], p.0[1], p.0[2], u8::MAX))
+                    .collect::<Vec<_>>();
+
+                move |k| {
+                    let (colors, indices) = match (options.kmeans_optimize, options.dither) {
+                        (true, true) => exoquant::convert_to_indexed(
+                            &pixels,
+                            image.width() as usize,
+                            k.into_inner().into(),
+                            &exoquant::optimizer::KMeans,
+                            &exoquant::ditherer::FloydSteinberg::new(),
+                        ),
+                        (true, false) => exoquant::convert_to_indexed(
+                            &pixels,
+                            image.width() as usize,
+                            k.into_inner().into(),
+                            &exoquant::optimizer::KMeans,
+                            &exoquant::ditherer::None,
+                        ),
+                        (false, true) => exoquant::convert_to_indexed(
+                            &pixels,
+                            image.width() as usize,
+                            k.into_inner().into(),
+                            &exoquant::optimizer::None,
+                            &exoquant::ditherer::FloydSteinberg::new(),
+                        ),
+                        (false, false) => exoquant::convert_to_indexed(
+                            &pixels,
+                            image.width() as usize,
+                            k.into_inner().into(),
+                            &exoquant::optimizer::None,
+                            &exoquant::ditherer::None,
+                        ),
+                    };
+
+                    indices
+                        .into_iter()
+                        .map(|i| {
+                            let color = colors[usize::from(i)];
+                            RGB8::new(color.r, color.g, color.b)
+                        })
+                        .collect()
+                }
+            });
+        }
+        (algo, _) => {
+            panic!(
+                "{algo} does not support the {} colorspace",
+                options.colorspace
+            )
+        }
+    }
+}
