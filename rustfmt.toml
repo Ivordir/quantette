@@ -1,0 +1,4 @@
+newline_style = "Unix"
+use_field_init_shorthand = true
+struct_lit_width = 40
+struct_variant_width = 60
