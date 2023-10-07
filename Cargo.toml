@@ -41,3 +41,27 @@ rayon = { version = "1.8.0", optional = true }
 rand = { version = "0.8.5", default-features = false, features = ["alloc"], optional = true }
 rand_distr = { version = "0.4.3", optional = true }
 rand_xoshiro = { version = "0.6.0", optional = true }
+
+[dev-dependencies]
+criterion = "0.5.1"
+image = { version = "0.24.7", default-features = false, features = ["jpeg", "jpeg_rayon", "png"] }
+
+[[bench]]
+name = "color_counts"
+harness = false
+path = "benches/color_counts.rs"
+
+[[bench]]
+name = "dither"
+harness = false
+path = "benches/dither.rs"
+
+[[bench]]
+name = "wu"
+harness = false
+path = "benches/wu.rs"
+
+[[bench]]
+name = "kmeans"
+harness = false
+path = "benches/kmeans.rs"
