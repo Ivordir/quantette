@@ -52,6 +52,10 @@ imagequant = "4.2.0"
 exoquant = "0.2.0"
 dssim = "3.2.4"
 
+[profile.perf]
+inherits = "release"
+debug = true
+
 [[bench]]
 name = "color_counts"
 harness = false
