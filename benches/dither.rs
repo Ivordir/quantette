@@ -28,7 +28,13 @@ fn bench<ColorFreq>(
         .sampling_mode(SamplingMode::Flat)
         .warm_up_time(Duration::from_millis(500));
 
-    for (k, secs) in [(64.into(), 3), (16.into(), 2), (PaletteSize::MAX, 4)] {
+    for (k, secs) in [
+        (PaletteSize::MAX, 4),
+        (128.into(), 4),
+        (64.into(), 3),
+        (32.into(), 2),
+        (16.into(), 2),
+    ] {
         group.measurement_time(Duration::from_secs(secs));
         for (path, counts) in counts {
             group.bench_with_input(BenchmarkId::new(k.to_string(), path), &(k, counts), &mut f);
