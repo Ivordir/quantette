@@ -116,7 +116,7 @@ fn kmeans_oklab_remap_single(c: &mut Criterion) {
                     .unwrap();
 
             b.iter(|| {
-                kmeans::quantize::<_, _, 3>(
+                kmeans::indexed_palette::<_, _, 3>(
                     counts,
                     num_samples(counts),
                     initial_centroids.clone(),
@@ -137,7 +137,12 @@ fn kmeans_srgb_remap_single(c: &mut Criterion) {
                 .unwrap();
 
         b.iter(|| {
-            kmeans::quantize::<_, _, 3>(counts, num_samples(counts), initial_centroids.clone(), 0)
+            kmeans::indexed_palette::<_, _, 3>(
+                counts,
+                num_samples(counts),
+                initial_centroids.clone(),
+                0,
+            )
         })
     })
 }
@@ -208,7 +213,7 @@ fn kmeans_oklab_remap_par(c: &mut Criterion) {
                     .unwrap();
 
             b.iter(|| {
-                kmeans::quantize_par::<_, _, 3>(
+                kmeans::indexed_palette_par::<_, _, 3>(
                     counts,
                     num_samples(counts),
                     BATCH_SIZE,
@@ -230,7 +235,7 @@ fn kmeans_srgb_remap_par(c: &mut Criterion) {
                 .unwrap();
 
         b.iter(|| {
-            kmeans::quantize_par::<_, _, 3>(
+            kmeans::indexed_palette_par::<_, _, 3>(
                 counts,
                 num_samples(counts),
                 BATCH_SIZE,

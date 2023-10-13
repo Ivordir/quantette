@@ -160,7 +160,7 @@ where
 }
 
 #[must_use]
-pub fn quantize<Color, Component, const N: usize>(
+pub fn indexed_palette<Color, Component, const N: usize>(
     color_counts: &(impl ColorAndFrequency<Color, Component, N> + ColorRemap),
     num_samples: u32,
     initial_centroids: Centroids<Color>,

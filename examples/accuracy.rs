@@ -284,7 +284,7 @@ fn main() {
                 |srgb| srgb,
                 |srgb| srgb,
                 |color_counts, k| {
-                    let res = kmeans::quantize_par::<_, _, 3>(
+                    let res = kmeans::indexed_palette_par::<_, _, 3>(
                         color_counts,
                         options.num_samples(color_counts),
                         options.batch_size,
@@ -304,7 +304,7 @@ fn main() {
                 images,
                 max_name_len,
                 |color_counts, k| {
-                    let res = kmeans::quantize_par::<_, _, 3>(
+                    let res = kmeans::indexed_palette_par::<_, _, 3>(
                         color_counts,
                         options.num_samples(color_counts),
                         options.batch_size,
@@ -324,7 +324,7 @@ fn main() {
                 images,
                 max_name_len,
                 |color_counts, k| {
-                    let res = kmeans::quantize_par::<_, _, 3>(
+                    let res = kmeans::indexed_palette_par::<_, _, 3>(
                         color_counts,
                         options.num_samples(color_counts),
                         options.batch_size,
@@ -346,7 +346,7 @@ fn main() {
                 |srgb| srgb,
                 |srgb| srgb,
                 |color_counts, k| {
-                    let res = kmeans::quantize::<_, _, 3>(
+                    let res = kmeans::indexed_palette::<_, _, 3>(
                         color_counts,
                         options.num_samples(color_counts),
                         wu::palette(color_counts, k, &ColorSpace::default_binner_srgb_u8())
@@ -365,7 +365,7 @@ fn main() {
                 images,
                 max_name_len,
                 |color_counts, k| {
-                    let res = kmeans::quantize::<_, _, 3>(
+                    let res = kmeans::indexed_palette::<_, _, 3>(
                         color_counts,
                         options.num_samples(color_counts),
                         wu::palette(color_counts, k, &ColorSpace::default_binner_lab_f32())
@@ -384,7 +384,7 @@ fn main() {
                 images,
                 max_name_len,
                 |color_counts, k| {
-                    let res = kmeans::quantize::<_, _, 3>(
+                    let res = kmeans::indexed_palette::<_, _, 3>(
                         color_counts,
                         options.num_samples(color_counts),
                         wu::palette(color_counts, k, &ColorSpace::default_binner_oklab_f32())
@@ -405,7 +405,7 @@ fn main() {
                 |srgb| srgb,
                 |srgb| srgb,
                 |image, k| {
-                    let res = wu::quantize(image, k, &ColorSpace::default_binner_srgb_u8());
+                    let res = wu::indexed_palette(image, k, &ColorSpace::default_binner_srgb_u8());
                     (res.palette, res.indices)
                 },
             );
@@ -416,7 +416,8 @@ fn main() {
                 images,
                 max_name_len,
                 |color_counts, k| {
-                    let res = wu::quantize(color_counts, k, &ColorSpace::default_binner_lab_f32());
+                    let res =
+                        wu::indexed_palette(color_counts, k, &ColorSpace::default_binner_lab_f32());
                     (res.palette, res.indices)
                 },
             );
@@ -427,7 +428,11 @@ fn main() {
                 images,
                 max_name_len,
                 |color_counts, k| {
-                    let re = wu::quantize(color_counts, k, &ColorSpace::default_binner_oklab_f32());
+                    let re = wu::indexed_palette(
+                        color_counts,
+                        k,
+                        &ColorSpace::default_binner_oklab_f32(),
+                    );
                     (re.palette, re.indices)
                 },
             );

@@ -66,7 +66,8 @@ fn dither_oklab_single(c: &mut Criterion) {
         &counts,
         |b, &(k, (image, color_counts))| {
             let (width, height) = image.dimensions();
-            let result = wu::quantize_par(color_counts, k, &ColorSpace::default_binner_oklab_f32());
+            let result =
+                wu::indexed_palette_par(color_counts, k, &ColorSpace::default_binner_oklab_f32());
 
             b.iter(|| {
                 let mut indices = result.indices.clone();
@@ -88,7 +89,7 @@ fn dither_srgb_single(c: &mut Criterion) {
     bench(c, "dither_srgb_single", counts, |b, &(k, image)| {
         let (width, height) = image.dimensions();
         let colors = ColorSlice::try_from(image).unwrap();
-        let result = wu::quantize_par(&colors, k, &ColorSpace::default_binner_srgb_u8());
+        let result = wu::indexed_palette_par(&colors, k, &ColorSpace::default_binner_srgb_u8());
 
         b.iter(|| {
             let mut indices = result.indices.clone();

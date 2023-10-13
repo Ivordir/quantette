@@ -199,7 +199,7 @@ where
 }
 
 #[must_use]
-pub fn quantize_par<Color, Component, const N: usize>(
+pub fn indexed_palette_par<Color, Component, const N: usize>(
     color_counts: &(impl ColorAndFrequency<Color, Component, N> + ParallelColorRemap),
     num_samples: u32,
     batch_size: u32,

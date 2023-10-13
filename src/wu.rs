@@ -500,7 +500,7 @@ where
     ColorFreq: ColorAndFrequency<Color, Component, N> + ColorRemap,
     u32: Into<Component::Sum>,
 {
-    fn quantize(&self, k: PaletteSize) -> QuantizeOutput<Color> {
+    fn indexed_palette(&self, k: PaletteSize) -> QuantizeOutput<Color> {
         let (palette, counts, lookup) = self.quantize_and_lookup(k);
 
         let indices = self
@@ -626,7 +626,7 @@ where
     }
 }
 
-pub fn quantize<Color, Component, const B: usize>(
+pub fn indexed_palette<Color, Component, const B: usize>(
     color_counts: &(impl ColorAndFrequency<Color, Component, N> + ColorRemap),
     k: PaletteSize,
     binner: &impl Binner3<Component, B>,
@@ -640,7 +640,7 @@ where
     if color_counts.num_colors() <= u32::from(k.into_inner()) {
         QuantizeOutput::trivial_quantize(color_counts)
     } else {
-        Wu3::from_color_counts(color_counts, binner).quantize(k)
+        Wu3::from_color_counts(color_counts, binner).indexed_palette(k)
     }
 }
 
@@ -664,7 +664,7 @@ where
 }
 
 #[cfg(feature = "threads")]
-pub fn quantize_par<Color, Component, const B: usize>(
+pub fn indexed_palette_par<Color, Component, const B: usize>(
     color_counts: &(impl ColorAndFrequency<Color, Component, N> + ParallelColorRemap + Send + Sync),
     k: PaletteSize,
     binner: &(impl Binner3<Component, B> + Sync),

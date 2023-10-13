@@ -466,7 +466,7 @@ where
 {
     let (palette, mut indices) = match method {
         QuantizeMethod::Wu => {
-            let res = wu::quantize(color_counts, k, binner);
+            let res = wu::indexed_palette(color_counts, k, binner);
             (res.palette, res.indices)
         }
         #[cfg(feature = "kmeans")]
@@ -479,7 +479,7 @@ where
 
             let num_samples = num_samples(sampling_factor, color_counts);
 
-            let res = kmeans::quantize(color_counts, num_samples, initial_centroids, seed);
+            let res = kmeans::indexed_palette(color_counts, num_samples, initial_centroids, seed);
             (res.palette, res.indices)
         }
     };
@@ -522,7 +522,7 @@ where
 {
     let (palette, mut indices) = match method {
         QuantizeMethod::Wu => {
-            let res = wu::quantize_par(color_counts, k, binner);
+            let res = wu::indexed_palette_par(color_counts, k, binner);
             (res.palette, res.indices)
         }
         #[cfg(feature = "kmeans")]
@@ -538,7 +538,7 @@ where
 
             let num_samples = num_samples(sampling_factor, color_counts);
 
-            let res = kmeans::quantize_par(
+            let res = kmeans::indexed_palette_par(
                 color_counts,
                 num_samples,
                 batch_size,

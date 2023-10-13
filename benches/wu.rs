@@ -61,7 +61,7 @@ fn wu_srgb_palette_single(c: &mut Criterion) {
 fn wu_oklab_remap_single(c: &mut Criterion) {
     let counts = to_oklab_counts(unsplash_images());
     bench(c, "wu_oklab_remap_single", &counts, |b, &(k, counts)| {
-        b.iter(|| wu::quantize(counts, k, &ColorSpace::default_binner_oklab_f32()))
+        b.iter(|| wu::indexed_palette(counts, k, &ColorSpace::default_binner_oklab_f32()))
     })
 }
 
@@ -69,7 +69,7 @@ fn wu_srgb_remap_single(c: &mut Criterion) {
     let counts = unsplash_images();
     bench(c, "wu_srgb_remap_single", counts, |b, &(k, image)| {
         b.iter(|| {
-            wu::quantize(
+            wu::indexed_palette(
                 &ColorSlice::try_from(image).unwrap(),
                 k,
                 &ColorSpace::default_binner_srgb_u8(),
@@ -101,7 +101,7 @@ fn wu_srgb_palette_par(c: &mut Criterion) {
 fn wu_oklab_remap_par(c: &mut Criterion) {
     let counts = to_oklab_counts(unsplash_images());
     bench(c, "wu_oklab_remap_par", &counts, |b, &(k, counts)| {
-        b.iter(|| wu::quantize_par(counts, k, &ColorSpace::default_binner_oklab_f32()))
+        b.iter(|| wu::indexed_palette_par(counts, k, &ColorSpace::default_binner_oklab_f32()))
     })
 }
 
@@ -109,7 +109,7 @@ fn wu_srgb_remap_par(c: &mut Criterion) {
     let counts = unsplash_images();
     bench(c, "wu_srgb_remap_par", counts, |b, &(k, image)| {
         b.iter(|| {
-            wu::quantize_par(
+            wu::indexed_palette_par(
                 &ColorSlice::try_from(image).unwrap(),
                 k,
                 &ColorSpace::default_binner_srgb_u8(),
