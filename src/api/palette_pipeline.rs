@@ -201,10 +201,10 @@ where
     ) -> Vec<Color>
     where
         QuantColor: ColorComponents<Component, 3>,
-        Component: SumPromotion<u32> + Into<f64>,
+        Component: SumPromotion<u32> + Into<f32>,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
         u32: Into<Component::Sum>,
-        f64: AsPrimitive<Component>,
+        f32: AsPrimitive<Component>,
     {
         let Self {
             colors, k, quantize_method, dedup_pixels, ..
@@ -283,10 +283,10 @@ where
     ) -> Vec<Color>
     where
         QuantColor: ColorComponents<Component, 3> + Send + Sync,
-        Component: SumPromotion<u32> + Into<f64> + Send + Sync,
+        Component: SumPromotion<u32> + Into<f32> + Send + Sync,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
         u32: Into<Component::Sum>,
-        f64: AsPrimitive<Component>,
+        f32: AsPrimitive<Component>,
     {
         let Self {
             colors, k, quantize_method, dedup_pixels, ..
@@ -317,10 +317,10 @@ fn palette<Color, Component, const B: usize>(
 ) -> Vec<Color>
 where
     Color: ColorComponents<Component, 3>,
-    Component: SumPromotion<u32> + Into<f64>,
+    Component: SumPromotion<u32> + Into<f32>,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     u32: Into<Component::Sum>,
-    f64: AsPrimitive<Component>,
+    f32: AsPrimitive<Component>,
 {
     match method {
         QuantizeMethod::Wu => wu::palette(color_counts, k, binner).palette,
@@ -348,10 +348,10 @@ fn palette_par<Color, Component, const B: usize>(
 ) -> Vec<Color>
 where
     Color: ColorComponents<Component, 3> + Send,
-    Component: SumPromotion<u32> + Into<f64> + Sync + Send,
+    Component: SumPromotion<u32> + Into<f32> + Sync + Send,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     u32: Into<Component::Sum>,
-    f64: AsPrimitive<Component>,
+    f32: AsPrimitive<Component>,
 {
     match method {
         QuantizeMethod::Wu => wu::palette_par(color_counts, k, binner).palette,

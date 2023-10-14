@@ -119,7 +119,7 @@ struct Options {
     dither: bool,
 
     #[arg(long)]
-    dither_strength: Option<f64>,
+    dither_strength: Option<f32>,
 
     images: Vec<PathBuf>,
 }
@@ -220,7 +220,7 @@ fn main() {
             + Copy,
     ) where
         Color: ColorComponents<Component, N> + Send + Sync,
-        Component: Copy + Into<f64> + 'static,
+        Component: Copy + Into<f32> + 'static,
     {
         each_image(options, images, name_len, |image| {
             let color_counts =
@@ -263,7 +263,7 @@ fn main() {
         Color: ColorComponents<Component, N> + Send + Sync,
         LinSrgb: IntoColor<Color>,
         Color: IntoColor<LinSrgb>,
-        Component: Copy + Into<f64> + 'static,
+        Component: Copy + Into<f32> + 'static,
     {
         each_image_color_counts(
             options,

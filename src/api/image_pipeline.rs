@@ -48,7 +48,7 @@ where
     pub(crate) colorspace: ColorSpace,
     pub(crate) quantize_method: QuantizeMethod<Color>,
     pub(crate) dither: bool,
-    pub(crate) dither_strength: f64,
+    pub(crate) dither_strength: f32,
     pub(crate) dedup_pixels: bool,
 }
 
@@ -112,7 +112,7 @@ where
     }
 
     #[must_use]
-    pub fn dither_strength(mut self, strength: f64) -> Self {
+    pub fn dither_strength(mut self, strength: f32) -> Self {
         self.dither_strength = strength;
         self
     }
@@ -241,11 +241,11 @@ where
     ) -> (Vec<Color>, Vec<u8>)
     where
         QuantColor: ColorComponents<Component, 3>,
-        Component: SumPromotion<u32> + Into<f64>,
+        Component: SumPromotion<u32> + Into<f32>,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
         FloydSteinberg: Ditherer<Component>,
         u32: Into<Component::Sum>,
-        f64: AsPrimitive<Component>,
+        f32: AsPrimitive<Component>,
     {
         let ditherer = self.ditherer();
         let Self {
@@ -382,10 +382,10 @@ where
     ) -> (Vec<Color>, Vec<u8>)
     where
         QuantColor: ColorComponents<Component, 3> + Send + Sync,
-        Component: SumPromotion<u32> + Into<f64> + Send + Sync,
+        Component: SumPromotion<u32> + Into<f32> + Send + Sync,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
         u32: Into<Component::Sum>,
-        f64: AsPrimitive<Component>,
+        f32: AsPrimitive<Component>,
     {
         let ditherer = self.ditherer();
         let Self {
@@ -458,11 +458,11 @@ fn indexed_palette<Color, Component, const B: usize>(
 ) -> (Vec<Color>, Vec<u8>)
 where
     Color: ColorComponents<Component, 3>,
-    Component: SumPromotion<u32> + Into<f64>,
+    Component: SumPromotion<u32> + Into<f32>,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     FloydSteinberg: Ditherer<Component>,
     u32: Into<Component::Sum>,
-    f64: AsPrimitive<Component>,
+    f32: AsPrimitive<Component>,
 {
     let (palette, mut indices) = match method {
         QuantizeMethod::Wu => {
@@ -514,11 +514,11 @@ fn indexed_palette_par<Color, Component, const B: usize>(
 ) -> (Vec<Color>, Vec<u8>)
 where
     Color: ColorComponents<Component, 3> + Send,
-    Component: SumPromotion<u32> + Into<f64> + Send + Sync,
+    Component: SumPromotion<u32> + Into<f32> + Send + Sync,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     FloydSteinberg: Ditherer<Component>,
     u32: Into<Component::Sum>,
-    f64: AsPrimitive<Component>,
+    f32: AsPrimitive<Component>,
 {
     let (palette, mut indices) = match method {
         QuantizeMethod::Wu => {

@@ -35,7 +35,8 @@ kmeans = ["rand", "rand_distr", "rand_xoshiro"]
 bitvec = "1.0.1"
 num-traits = "0.2.16"
 ordered-float = "4.1.0"
-palette = { version = "0.7.3", default-features = false, features = ["std"] }
+wide = "0.7.12"
+palette = { version = "0.7.3", default-features = false, features = ["std", "wide"] }
 image = { version = "0.24.7", default-features = false, optional = true }
 rayon = { version = "1.8.0", optional = true }
 rand = { version = "0.8.5", default-features = false, features = ["alloc"], optional = true }

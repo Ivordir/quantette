@@ -6,13 +6,11 @@
 //
 // Accessed from https://faculty.uca.edu/ecelebi/documents/JRTIP_2020a.pdf
 
-mod kdtree;
 mod online;
 
 #[cfg(feature = "threads")]
 mod minibatch;
 
-pub(crate) use kdtree::*;
 pub use minibatch::*;
 pub use online::*;
 

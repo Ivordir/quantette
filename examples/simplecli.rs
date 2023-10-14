@@ -67,7 +67,7 @@ enum Quantizer {
         dither: bool,
 
         #[arg(long, default_value_t = FloydSteinberg::DEFAULT_STRENGTH)]
-        dither_strength: f64,
+        dither_strength: f32,
 
         #[arg(long, default_value_t = 0.5)]
         sampling_factor: f64,

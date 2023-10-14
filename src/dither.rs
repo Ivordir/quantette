@@ -4,6 +4,7 @@ use std::array;
 
 use ordered_float::OrderedFloat;
 use palette::cast::AsArrays;
+use wide::{f32x8, u32x8, CmpLe};
 
 pub trait Ditherer<T> {
     fn dither_indexed<Color, const N: usize>(
@@ -29,10 +30,10 @@ pub trait Ditherer<T> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct FloydSteinberg(pub f64);
+pub struct FloydSteinberg(pub f32);
 
 impl FloydSteinberg {
-    pub const DEFAULT_STRENGTH: f64 = 7.0 / 8.0;
+    pub const DEFAULT_STRENGTH: f32 = 7.0 / 8.0;
 
     #[must_use]
     pub fn new() -> Self {
@@ -46,7 +47,7 @@ impl Default for FloydSteinberg {
     }
 }
 
-fn distance_table<const N: usize>(palette: &[[f64; N]]) -> (Vec<u8>, Vec<f64>) {
+fn distance_table<const N: usize>(palette: &[[f32; N]]) -> (Vec<f32>, Vec<(u32x8, [f32x8; N])>) {
     let k = palette.len();
     let mut distances = vec![(0, 0.0); k * k];
     #[allow(clippy::cast_possible_truncation)]
@@ -65,45 +66,110 @@ fn distance_table<const N: usize>(palette: &[[f64; N]]) -> (Vec<u8>, Vec<f64>) {
         row.sort_by_key(|&(_, d)| OrderedFloat(d));
     }
 
-    distances.into_iter().unzip()
-}
+    let (neighbors, distances): (Vec<_>, Vec<_>) = distances.into_iter().unzip();
 
-#[inline]
+    let mut components = Vec::with_capacity(k * k.div_ceil(8));
+    for row in neighbors.chunks_exact(k) {
+        let chunks = row.chunks_exact(8);
 
-fn nearest_neighbor<const N: usize>(
-    i: u8,
-    point: [f64; N],
-    palette: &[[f64; N]],
-    neighbors: &[u8],
-    distances: &[f64],
-) -> (u8, [f64; N]) {
-    let mut min_index = i;
-    let i = usize::from(i);
-    let mut nearest = palette[i];
-    let dist = squared_euclidean_distance(point, nearest);
-    let mut min_dist = dist;
+        components.extend(chunks.clone().map(|chunk| {
+            let neighbors = u32x8::new(array::from_fn(|i| chunk[i].into()));
+            let chunk = array::from_fn::<_, 8, _>(|i| palette[usize::from(chunk[i])]);
+            let components = array::from_fn(|i| f32x8::new(array::from_fn(|j| chunk[j][i])));
+            (neighbors, components)
+        }));
 
-    let k = palette.len();
-    let row = (i * k + 1)..((i + 1) * k);
-    for (&j, &half_dist) in neighbors[row.clone()].iter().zip(&distances[row]) {
-        if dist < half_dist {
-            break;
-        }
-        let other = palette[usize::from(j)];
-        let distance = squared_euclidean_distance(point, other);
-        if distance < min_dist {
-            min_dist = distance;
-            min_index = j;
-            nearest = other;
+        if !chunks.remainder().is_empty() {
+            let mut neigh = [0; 8];
+            let mut comp = [[f32::INFINITY; 8]; N];
+            for (i, &j) in chunks.remainder().iter().enumerate() {
+                neigh[i] = j.into();
+                for (d, s) in comp.iter_mut().zip(palette[usize::from(j)]) {
+                    d[i] = s;
+                }
+            }
+            components.push((u32x8::new(neigh), comp.map(f32x8::new)));
         }
     }
 
-    (min_index, nearest)
+    let distances = distances.into_iter().step_by(8).collect();
+
+    (distances, components)
+}
+
+#[allow(clippy::inline_always)]
+#[inline(always)]
+fn nearest_neighbor<const N: usize>(
+    i: u8,
+    point: [f32; N],
+    palette: &[[f32; N]],
+    distances: &[f32],
+    components: &[(u32x8, [f32x8; N])],
+) -> (u8, [f32; N]) {
+    let k = palette.len();
+    let i = usize::from(i);
+
+    let p = point.map(f32x8::splat);
+
+    let row_start = i * k.div_ceil(8);
+    let row_end = (i + 1) * k.div_ceil(8);
+
+    let (mut min_neighbor, start_components) = components[row_start];
+
+    #[allow(clippy::unwrap_used)]
+    let mut min_distance = array::from_fn::<_, N, _>(|i| {
+        let diff = p[i] - start_components[i];
+        diff * diff
+    })
+    .into_iter()
+    .reduce(|a, b| a + b)
+    .unwrap();
+
+    let row = (row_start + 1)..row_end;
+    for (&(neighbor, chunk), &half_dist) in components[row.clone()].iter().zip(&distances[row]) {
+        if min_distance.cmp_le(half_dist).any() {
+            break;
+        }
+
+        #[allow(clippy::unwrap_used)]
+        let distance = array::from_fn::<_, N, _>(|i| {
+            let diff = p[i] - chunk[i];
+            diff * diff
+        })
+        .into_iter()
+        .reduce(|a, b| a + b)
+        .unwrap();
+
+        #[allow(unsafe_code)]
+        let mask: u32x8 = unsafe { std::mem::transmute(distance.cmp_le(min_distance)) };
+        min_neighbor = mask.blend(neighbor, min_neighbor);
+        min_distance = min_distance.fast_min(distance);
+    }
+
+    let mut min_lane = 0;
+    let mut min_dist = f32::INFINITY;
+    for (i, &v) in min_distance.as_array_ref().iter().enumerate() {
+        if v < min_dist {
+            min_dist = v;
+            min_lane = i;
+        }
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    let min_index = min_neighbor.as_array_ref()[min_lane] as u8;
+    (min_index, palette[usize::from(min_index)])
+}
+
+#[inline]
+fn arr_mul_add_assign<const N: usize>(arr: &mut [f32; N], alpha: f32, other: &[f32; N]) {
+    for i in 0..N {
+        arr[i] += alpha * other[i];
+    }
 }
 
 impl<T> Ditherer<T> for FloydSteinberg
 where
-    T: Copy + Into<f64>,
+    T: Copy + Into<f32>,
 {
     fn dither_indexed<Color, const N: usize>(
         &self,
@@ -118,49 +184,43 @@ where
     {
         let FloydSteinberg(strength) = *self;
         let width = width as usize;
+
         let palette = palette
             .as_arrays()
             .iter()
             .map(|c| c.map(Into::into))
             .collect::<Vec<_>>();
 
-        let original_colors = original_colors.as_arrays();
+        let (distances, components) = distance_table(&palette);
 
-        let (neighbors, distances) = distance_table(&palette);
+        let original_colors = original_colors.as_arrays();
 
         let mut error = vec![[0.0; N]; 2 * (width + 2)];
         let (mut error1, mut error2) = error.split_at_mut(width + 2);
+        let mut pixel_row = vec![[0.0; N]; width];
 
         for (row, (indices, colors)) in indices
             .chunks_exact_mut(width)
             .zip(original_indices.chunks_exact(width))
             .enumerate()
         {
-            #[inline]
-            fn arr_mul_add_assign<const N: usize>(
-                arr: &mut [f64; N],
-                alpha: f64,
-                other: &[f64; N],
-            ) {
-                for i in 0..N {
-                    arr[i] += alpha * other[i];
-                }
+            for (d, &s) in pixel_row.iter_mut().zip(colors) {
+                *d = original_colors[s as usize].map(Into::into);
             }
 
-            if row % 2 == 0 {
-                for (x, (i, &og_i)) in indices.iter_mut().zip(colors).enumerate() {
-                    let mut point = original_colors[og_i as usize].map(Into::into);
-                    let err = error1[x + 1];
-                    for i in 0..N {
-                        point[i] += err[i];
-                    }
+            for (x, (i, &point)) in indices.iter_mut().zip(&pixel_row).enumerate() {
+                let mut point = point;
+                let err = error1[x + 1];
+                for i in 0..N {
+                    point[i] += err[i];
+                }
 
-                    let (j, nearest) =
-                        nearest_neighbor(*i, point, &palette, &neighbors, &distances);
+                let (j, nearest) = nearest_neighbor(*i, point, &palette, &distances, &components);
 
-                    *i = j;
-                    let err = array::from_fn(|i| point[i] - nearest[i]);
+                *i = j;
+                let err = array::from_fn(|i| point[i] - nearest[i]);
 
+                if row % 2 == 0 {
                     arr_mul_add_assign(&mut error1[x + 2], strength * (7.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x], strength * (3.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
@@ -169,21 +229,7 @@ where
                     for i in 0..N {
                         e[i] = strength * (1.0 / 16.0) * err[i];
                     }
-                }
-            } else {
-                for (x, (i, &og_i)) in indices.iter_mut().zip(colors).enumerate().rev() {
-                    let mut point = original_colors[og_i as usize].map(Into::into);
-                    let err = error1[x + 1];
-                    for i in 0..N {
-                        point[i] += err[i];
-                    }
-
-                    let (j, nearest) =
-                        nearest_neighbor(*i, point, &palette, &neighbors, &distances);
-
-                    *i = j;
-                    let err = array::from_fn(|i| point[i] - nearest[i]);
-
+                } else {
                     arr_mul_add_assign(&mut error1[x], strength * (7.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x + 2], strength * (3.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
@@ -213,13 +259,14 @@ where
     {
         let FloydSteinberg(strength) = *self;
         let width = width as usize;
+
         let palette = palette
             .as_arrays()
             .iter()
             .map(|c| c.map(Into::into))
             .collect::<Vec<_>>();
 
-        let (neighbors, distances) = distance_table(&palette);
+        let (distances, components) = distance_table(&palette);
 
         let mut error = vec![[0.0; N]; 2 * (width + 2)];
         let (mut error1, mut error2) = error.split_at_mut(width + 2);
@@ -229,31 +276,19 @@ where
             .zip(original_colors.as_arrays().chunks_exact(width))
             .enumerate()
         {
-            #[inline]
-            fn arr_mul_add_assign<const N: usize>(
-                arr: &mut [f64; N],
-                alpha: f64,
-                other: &[f64; N],
-            ) {
+            for (x, (i, &og)) in indices.iter_mut().zip(colors).enumerate() {
+                let mut point = og.map(Into::into);
+                let err = error1[x + 1];
                 for i in 0..N {
-                    arr[i] += alpha * other[i];
+                    point[i] += err[i];
                 }
-            }
 
-            if row % 2 == 0 {
-                for (x, (i, &og)) in indices.iter_mut().zip(colors).enumerate() {
-                    let mut point = og.map(Into::into);
-                    let err = error1[x + 1];
-                    for i in 0..N {
-                        point[i] += err[i];
-                    }
+                let (j, nearest) = nearest_neighbor(*i, point, &palette, &distances, &components);
 
-                    let (j, nearest) =
-                        nearest_neighbor(*i, point, &palette, &neighbors, &distances);
+                *i = j;
+                let err = array::from_fn(|i| point[i] - nearest[i]);
 
-                    *i = j;
-                    let err = array::from_fn(|i| point[i] - nearest[i]);
-
+                if row % 2 == 0 {
                     arr_mul_add_assign(&mut error1[x + 2], strength * (7.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x], strength * (3.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
@@ -262,21 +297,7 @@ where
                     for i in 0..N {
                         e[i] = strength * (1.0 / 16.0) * err[i];
                     }
-                }
-            } else {
-                for (x, (i, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
-                    let mut point = og.map(Into::into);
-                    let err = error1[x + 1];
-                    for i in 0..N {
-                        point[i] += err[i];
-                    }
-
-                    let (j, nearest) =
-                        nearest_neighbor(*i, point, &palette, &neighbors, &distances);
-
-                    *i = j;
-                    let err = array::from_fn(|i| point[i] - nearest[i]);
-
+                } else {
                     arr_mul_add_assign(&mut error1[x], strength * (7.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x + 2], strength * (3.0 / 16.0), &err);
                     arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
@@ -287,10 +308,10 @@ where
                     }
                 }
             }
-
-            std::mem::swap(&mut error1, &mut error2);
-            error2[1] = [0.0; N];
-            error2[width] = [0.0; N];
         }
+
+        std::mem::swap(&mut error1, &mut error2);
+        error2[1] = [0.0; N];
+        error2[width] = [0.0; N];
     }
 }
