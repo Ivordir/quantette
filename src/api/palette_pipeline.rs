@@ -31,23 +31,17 @@ use num_traits::AsPrimitive;
 use palette::{Lab, Oklab};
 
 #[derive(Debug, Clone)]
-pub struct PalettePipeline<'a, Color, const N: usize>
-where
-    Color: ColorComponents<u8, N>,
-{
-    pub(crate) colors: ColorSlice<'a, Color>,
+pub struct PalettePipeline<'a> {
+    pub(crate) colors: ColorSlice<'a, Srgb<u8>>,
     pub(crate) k: PaletteSize,
     pub(crate) colorspace: ColorSpace,
-    pub(crate) quantize_method: QuantizeMethod<Color>,
+    pub(crate) quantize_method: QuantizeMethod<Srgb<u8>>,
     pub(crate) dedup_pixels: bool,
 }
 
-impl<'a, Color, const N: usize> PalettePipeline<'a, Color, N>
-where
-    Color: ColorComponents<u8, N>,
-{
+impl<'a> PalettePipeline<'a> {
     #[must_use]
-    pub fn new(colors: ColorSlice<'a, Color>) -> Self {
+    pub fn new(colors: ColorSlice<'a, Srgb<u8>>) -> Self {
         Self {
             colors,
             k: PaletteSize::default(),
@@ -79,14 +73,14 @@ where
 
     #[must_use]
     #[cfg(feature = "kmeans")]
-    pub fn quantize_method(mut self, quantize_method: QuantizeMethod<Color>) -> Self {
+    pub fn quantize_method(mut self, quantize_method: QuantizeMethod<Srgb<u8>>) -> Self {
         self.quantize_method = quantize_method;
         self
     }
 }
 
 #[cfg(feature = "image")]
-impl<'a> TryFrom<&'a RgbImage> for PalettePipeline<'a, Srgb<u8>, 3> {
+impl<'a> TryFrom<&'a RgbImage> for PalettePipeline<'a> {
     type Error = AboveMaxLen<u32>;
 
     fn try_from(image: &'a RgbImage) -> Result<Self, Self::Error> {
@@ -94,11 +88,8 @@ impl<'a> TryFrom<&'a RgbImage> for PalettePipeline<'a, Srgb<u8>, 3> {
     }
 }
 
-impl<'a, Color, const N: usize> From<ImagePipeline<'a, Color, N>> for PalettePipeline<'a, Color, N>
-where
-    Color: ColorComponents<u8, N>,
-{
-    fn from(value: ImagePipeline<'a, Color, N>) -> Self {
+impl<'a> From<ImagePipeline<'a>> for PalettePipeline<'a> {
+    fn from(value: ImagePipeline<'a>) -> Self {
         let ImagePipeline {
             colors,
             k,
@@ -118,12 +109,9 @@ where
     }
 }
 
-impl<'a, Color> PalettePipeline<'a, Color, 3>
-where
-    Color: ColorComponents<u8, 3>,
-{
+impl<'a> PalettePipeline<'a> {
     #[must_use]
-    pub fn palette(self) -> Vec<Color> {
+    pub fn palette(self) -> Vec<Srgb<u8>> {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let Self {
@@ -166,10 +154,10 @@ where
     }
 
     #[cfg(feature = "colorspaces")]
-    fn convert_quantize_method<QuantColor>(
-        quantize_method: QuantizeMethod<Color>,
-        convert_to: impl Fn(Color) -> QuantColor,
-    ) -> QuantizeMethod<QuantColor> {
+    fn convert_quantize_method<Color>(
+        quantize_method: QuantizeMethod<Srgb<u8>>,
+        convert_to: impl Fn(Srgb<u8>) -> Color,
+    ) -> QuantizeMethod<Color> {
         match quantize_method {
             QuantizeMethod::Wu => QuantizeMethod::Wu,
             #[cfg(feature = "kmeans")]
@@ -192,14 +180,14 @@ where
     }
 
     #[cfg(feature = "colorspaces")]
-    fn palette_convert<QuantColor, Component, const B: usize>(
+    fn palette_convert<Color, Component, const B: usize>(
         self,
         binner: &impl Binner3<Component, B>,
-        convert_to: impl Fn(Color) -> QuantColor,
-        convert_back: impl Fn(QuantColor) -> Color,
-    ) -> Vec<Color>
+        convert_to: impl Fn(Srgb<u8>) -> Color,
+        convert_back: impl Fn(Color) -> Srgb<u8>,
+    ) -> Vec<Srgb<u8>>
     where
-        QuantColor: ColorComponents<Component, 3>,
+        Color: ColorComponents<Component, 3>,
         Component: SumPromotion<u32> + Into<f32>,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
         u32: Into<Component::Sum>,
@@ -225,12 +213,9 @@ where
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color> PalettePipeline<'a, Color, 3>
-where
-    Color: ColorComponents<u8, 3> + Send + Sync,
-{
+impl<'a> PalettePipeline<'a> {
     #[must_use]
-    pub fn palette_par(self) -> Vec<Color> {
+    pub fn palette_par(self) -> Vec<Srgb<u8>> {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let Self {
@@ -273,14 +258,14 @@ where
     }
 
     #[cfg(feature = "colorspaces")]
-    fn palette_convert_par<QuantColor, Component, const B: usize>(
+    fn palette_convert_par<Color, Component, const B: usize>(
         self,
         binner: &(impl Binner3<Component, B> + Sync),
-        convert_to: impl Fn(Color) -> QuantColor + Send + Sync,
-        convert_back: impl Fn(QuantColor) -> Color,
-    ) -> Vec<Color>
+        convert_to: impl Fn(Srgb<u8>) -> Color + Send + Sync,
+        convert_back: impl Fn(Color) -> Srgb<u8>,
+    ) -> Vec<Srgb<u8>>
     where
-        QuantColor: ColorComponents<Component, 3> + Send + Sync,
+        Color: ColorComponents<Component, 3> + Send + Sync,
         Component: SumPromotion<u32> + Into<f32> + Send + Sync,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
         u32: Into<Component::Sum>,

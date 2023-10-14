@@ -38,25 +38,19 @@ use palette::{Lab, Oklab};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
-pub struct ImagePipeline<'a, Color, const N: usize>
-where
-    Color: ColorComponents<u8, N>,
-{
-    pub(crate) colors: ColorSlice<'a, Color>,
+pub struct ImagePipeline<'a> {
+    pub(crate) colors: ColorSlice<'a, Srgb<u8>>,
     pub(crate) dimensions: (u32, u32),
     pub(crate) k: PaletteSize,
     pub(crate) colorspace: ColorSpace,
-    pub(crate) quantize_method: QuantizeMethod<Color>,
+    pub(crate) quantize_method: QuantizeMethod<Srgb<u8>>,
     pub(crate) dither: bool,
     pub(crate) dither_strength: f32,
     pub(crate) dedup_pixels: bool,
 }
 
-impl<'a, Color, const N: usize> ImagePipeline<'a, Color, N>
-where
-    Color: ColorComponents<u8, N>,
-{
-    fn new_unchecked(colors: ColorSlice<'a, Color>, width: u32, height: u32) -> Self {
+impl<'a> ImagePipeline<'a> {
+    fn new_unchecked(colors: ColorSlice<'a, Srgb<u8>>, width: u32, height: u32) -> Self {
         Self {
             colors,
             dimensions: (width, height),
@@ -70,7 +64,7 @@ where
     }
 
     #[must_use]
-    pub fn new(colors: ColorSlice<'a, Color>, width: u32, height: u32) -> Option<Self> {
+    pub fn new(colors: ColorSlice<'a, Srgb<u8>>, width: u32, height: u32) -> Option<Self> {
         if colors.len() == width as usize * height as usize {
             Some(Self::new_unchecked(colors, width, height))
         } else {
@@ -100,7 +94,7 @@ where
 
     #[must_use]
     #[cfg(feature = "kmeans")]
-    pub fn quantize_method(mut self, quantize_method: QuantizeMethod<Color>) -> Self {
+    pub fn quantize_method(mut self, quantize_method: QuantizeMethod<Srgb<u8>>) -> Self {
         self.quantize_method = quantize_method;
         self
     }
@@ -119,7 +113,7 @@ where
 }
 
 #[cfg(feature = "image")]
-impl<'a> TryFrom<&'a RgbImage> for ImagePipeline<'a, Srgb<u8>, 3> {
+impl<'a> TryFrom<&'a RgbImage> for ImagePipeline<'a> {
     type Error = AboveMaxLen<u32>;
 
     fn try_from(image: &'a RgbImage) -> Result<Self, Self::Error> {
@@ -131,12 +125,9 @@ impl<'a> TryFrom<&'a RgbImage> for ImagePipeline<'a, Srgb<u8>, 3> {
     }
 }
 
-impl<'a, Color> ImagePipeline<'a, Color, 3>
-where
-    Color: ColorComponents<u8, 3>,
-{
+impl<'a> ImagePipeline<'a> {
     #[must_use]
-    pub fn palette(self) -> Vec<Color> {
+    pub fn palette(self) -> Vec<Srgb<u8>> {
         PalettePipeline::from(self).palette()
     }
 
@@ -149,7 +140,7 @@ where
     }
 
     #[must_use]
-    pub fn indexed_palette(self) -> (Vec<Color>, Vec<u8>) {
+    pub fn indexed_palette(self) -> (Vec<Srgb<u8>>, Vec<u8>) {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let ditherer = self.ditherer();
@@ -206,10 +197,10 @@ where
     }
 
     #[cfg(feature = "colorspaces")]
-    fn convert_quantize_method<QuantColor>(
-        quantize_method: QuantizeMethod<Color>,
-        convert_to: impl Fn(Color) -> QuantColor,
-    ) -> QuantizeMethod<QuantColor> {
+    fn convert_quantize_method<Color>(
+        quantize_method: QuantizeMethod<Srgb<u8>>,
+        convert_to: impl Fn(Srgb<u8>) -> Color,
+    ) -> QuantizeMethod<Color> {
         match quantize_method {
             QuantizeMethod::Wu => QuantizeMethod::Wu,
             #[cfg(feature = "kmeans")]
@@ -232,14 +223,14 @@ where
     }
 
     #[cfg(feature = "colorspaces")]
-    fn indexed_palette_convert<QuantColor, Component, const B: usize>(
+    fn indexed_palette_convert<Color, Component, const B: usize>(
         self,
         binner: &impl Binner3<Component, B>,
-        convert_to: impl Fn(Color) -> QuantColor,
-        convert_back: impl Fn(QuantColor) -> Color,
-    ) -> (Vec<Color>, Vec<u8>)
+        convert_to: impl Fn(Srgb<u8>) -> Color,
+        convert_back: impl Fn(Color) -> Srgb<u8>,
+    ) -> (Vec<Srgb<u8>>, Vec<u8>)
     where
-        QuantColor: ColorComponents<Component, 3>,
+        Color: ColorComponents<Component, 3>,
         Component: SumPromotion<u32> + Into<f32>,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
         FloydSteinberg: Ditherer<Component>,
@@ -282,7 +273,7 @@ where
 }
 
 #[cfg(feature = "image")]
-impl<'a> ImagePipeline<'a, Srgb<u8>, 3> {
+impl<'a> ImagePipeline<'a> {
     #[must_use]
     pub fn quantized_rgbimage(self) -> RgbImage {
         let (width, height) = self.dimensions;
@@ -305,17 +296,14 @@ impl<'a> ImagePipeline<'a, Srgb<u8>, 3> {
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color> ImagePipeline<'a, Color, 3>
-where
-    Color: ColorComponents<u8, 3> + Send + Sync,
-{
+impl<'a> ImagePipeline<'a> {
     #[must_use]
-    pub fn palette_par(self) -> Vec<Color> {
+    pub fn palette_par(self) -> Vec<Srgb<u8>> {
         PalettePipeline::from(self).palette_par()
     }
 
     #[must_use]
-    pub fn indexed_palette_par(self) -> (Vec<Color>, Vec<u8>) {
+    pub fn indexed_palette_par(self) -> (Vec<Srgb<u8>>, Vec<u8>) {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let ditherer = self.ditherer();
@@ -372,14 +360,14 @@ where
     }
 
     #[cfg(feature = "colorspaces")]
-    fn indexed_palette_convert_par<QuantColor, Component, const B: usize>(
+    fn indexed_palette_convert_par<Color, Component, const B: usize>(
         self,
         binner: &(impl Binner3<Component, B> + Sync),
-        convert_to: impl Fn(Color) -> QuantColor + Send + Sync,
-        convert_back: impl Fn(QuantColor) -> Color,
-    ) -> (Vec<Color>, Vec<u8>)
+        convert_to: impl Fn(Srgb<u8>) -> Color + Send + Sync,
+        convert_back: impl Fn(Color) -> Srgb<u8>,
+    ) -> (Vec<Srgb<u8>>, Vec<u8>)
     where
-        QuantColor: ColorComponents<Component, 3> + Send + Sync,
+        Color: ColorComponents<Component, 3> + Send + Sync,
         Component: SumPromotion<u32> + Into<f32> + Send + Sync,
         Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
         u32: Into<Component::Sum>,
@@ -422,7 +410,7 @@ where
 }
 
 #[cfg(all(feature = "threads", feature = "image"))]
-impl<'a> ImagePipeline<'a, Srgb<u8>, 3> {
+impl<'a> ImagePipeline<'a> {
     #[must_use]
     pub fn quantized_rgbimage_par(self) -> RgbImage {
         let (width, height) = self.dimensions;
