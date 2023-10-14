@@ -9,9 +9,9 @@ use std::{
 };
 
 #[cfg(feature = "image")]
-use image::{Pixel, Rgb, RgbImage};
+use image::RgbImage;
 #[cfg(feature = "image")]
-use palette::{cast::FromComponents, Srgb};
+use palette::{cast::ComponentsAs, Srgb};
 
 #[derive(Debug, Clone, Copy)]
 pub struct AboveMaxLen<T>(pub T);
@@ -92,12 +92,8 @@ impl<'a> TryFrom<&'a RgbImage> for ColorSlice<'a, Srgb<u8>> {
     type Error = AboveMaxLen<u32>;
 
     fn try_from(image: &'a RgbImage) -> Result<Self, Self::Error> {
-        let len = image.pixels().len();
-        if len <= MAX_PIXELS as usize {
-            // this basically reimplements ImageBuffer::inner_pixels which is not public
-            let len = len * usize::from(Rgb::<u8>::CHANNEL_COUNT);
-            let colors = <&[Srgb<u8>]>::from_components(&image.as_raw()[..len]);
-            Ok(Self(colors))
+        if image.pixels().len() <= MAX_PIXELS as usize {
+            Ok(Self(image.components_as()))
         } else {
             Err(AboveMaxLen(MAX_PIXELS))
         }

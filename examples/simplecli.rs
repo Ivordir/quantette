@@ -190,12 +190,10 @@ fn main() {
         }
         Quantizer::Neuquant { sample_frac } => {
             let image = image.into_rgba8();
-            let slice = image.as_flat_samples();
-            let slice = slice.image_slice().unwrap();
 
             let nq = log!(
                 "quantization",
-                color_quant::NeuQuant::new(sample_frac.into(), k.into_inner().into(), slice)
+                color_quant::NeuQuant::new(sample_frac.into(), k.into_inner().into(), &image)
             );
 
             let (colors, indices) = log!("remapping", {
@@ -205,7 +203,7 @@ fn main() {
                     .map(|c| Srgb::new(c[0], c[1], c[2]))
                     .collect();
 
-                let indices = slice
+                let indices = image
                     .chunks_exact(4)
                     .map(|pix| nq.index_of(pix) as u8)
                     .collect();
@@ -217,13 +215,11 @@ fn main() {
         }
         Quantizer::Imagequant { quality, dither_level } => {
             let image = image.into_rgba8();
-            let slice = image.as_flat_samples();
-            let slice = slice.image_slice().unwrap();
 
             let mut libq = imagequant::new();
             let mut img = libq
                 .new_image(
-                    slice.as_rgba(),
+                    image.as_rgba(),
                     image.width() as usize,
                     image.height() as usize,
                     0.0,

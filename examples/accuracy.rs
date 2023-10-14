@@ -189,10 +189,7 @@ fn main() {
             let width = image.width() as usize;
             let height = image.height() as usize;
 
-            let slice = image.as_flat_samples();
-            let slice = slice.image_slice().unwrap();
-
-            let original = ds.create_image_rgb(slice.as_rgb(), width, height).unwrap();
+            let original = ds.create_image_rgb(image.as_rgb(), width, height).unwrap();
 
             let mut f2 = f1(image);
             let ssim_by_k = options
@@ -442,13 +439,10 @@ fn main() {
                 let image: RgbaImage = image.convert();
 
                 move |k| {
-                    let slice = image.as_flat_samples();
-                    let slice = slice.image_slice().unwrap();
-
                     let nq = color_quant::NeuQuant::new(
                         options.sample_frac.into(),
                         k.into_inner().into(),
-                        slice,
+                        &image,
                     );
 
                     let colors = nq
@@ -458,7 +452,7 @@ fn main() {
                         .map(RGBA::rgb)
                         .collect::<Vec<_>>();
 
-                    slice
+                    image
                         .chunks_exact(4)
                         .map(|pix| colors[nq.index_of(pix)])
                         .collect()
