@@ -193,22 +193,27 @@ where
         seed: u64,
         distribution: &impl Distribution<usize>,
     ) {
+        const BATCH: u32 = 256;
+
         let rng = &mut Xoroshiro128PlusPlus::seed_from_u64(seed);
         let colors = self.color_counts.color_components();
 
-        for _ in 0..(samples / 4) {
-            let c1 = colors[distribution.sample(rng)];
-            let c2 = colors[distribution.sample(rng)];
-            let c3 = colors[distribution.sample(rng)];
-            let c4 = colors[distribution.sample(rng)];
+        let mut batch = Vec::with_capacity(BATCH as usize);
 
-            for color in [c1, c2, c3, c4] {
+        for _ in 0..(samples / BATCH) {
+            batch.extend((0..BATCH).map(|_| colors[distribution.sample(rng)]));
+
+            for &color in &batch {
                 self.add_sample(color);
             }
+
+            batch.clear();
         }
 
-        for _ in 0..(samples % 4) {
-            self.add_sample(colors[distribution.sample(rng)]);
+        batch.extend((0..(samples % BATCH)).map(|_| colors[distribution.sample(rng)]));
+
+        for color in batch {
+            self.add_sample(color);
         }
     }
 
