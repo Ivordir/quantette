@@ -1,4 +1,4 @@
-use std::{iter::Sum, ops::AddAssign};
+use std::{alloc, iter::Sum, ops::AddAssign};
 
 use num_traits::{AsPrimitive, Float, NumAssignOps, NumOps, Zero};
 use palette::cast::ArrayCast;
@@ -57,8 +57,6 @@ pub unsafe trait ZeroedIsZero: Sized + Copy {
     #[must_use]
     fn box_zeroed() -> Box<Self> {
         unsafe {
-            use std::alloc;
-
             let layout = alloc::Layout::new::<Self>();
             let ptr = alloc::alloc_zeroed(layout).cast::<Self>();
             if ptr.is_null() {
