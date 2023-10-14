@@ -570,8 +570,7 @@ where
             let total_count = pixels.num_colors();
             let pixels = pixels.as_slice();
 
-            let threads = rayon::current_num_threads();
-            let chunk_size = (pixels.len() + threads - 1) / threads;
+            let chunk_size = pixels.len().div_ceil(rayon::current_num_threads());
             let red_prefixes = {
                 let mut red_prefixes = pixels
                     .as_arrays()
@@ -769,9 +768,7 @@ where
             let total_count = pixels.num_colors();
             let pixels = pixels.as_slice();
 
-            let threads = rayon::current_num_threads();
-            let chunk_size = (pixels.len() + threads - 1) / threads;
-
+            let chunk_size = pixels.len().div_ceil(rayon::current_num_threads());
             let red_prefixes = {
                 let mut red_prefixes = pixels
                     .par_chunks(chunk_size)

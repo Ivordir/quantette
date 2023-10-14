@@ -528,8 +528,7 @@ where
     u32: Into<Component::Sum>,
 {
     fn from_color_counts_par(color_counts: &'a ColorFreq, binner: &'a Binner) -> Self {
-        let num_threads = rayon::current_num_threads();
-        let chunk_size = (color_counts.len() + num_threads - 1) / num_threads;
+        let chunk_size = color_counts.len().div_ceil(rayon::current_num_threads());
         let partials = if let Some(counts) = color_counts.counts() {
             color_counts
                 .color_components()

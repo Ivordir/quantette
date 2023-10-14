@@ -116,7 +116,7 @@ where
         let colors = color_counts.color_components();
 
         let threads = rayon::current_num_threads();
-        let chunk_size = (batch_size as usize + threads - 1) / threads;
+        let chunk_size = (batch_size as usize).div_ceil(threads);
 
         let mut rng = (0..threads)
             .map(|i| Xoroshiro128PlusPlus::seed_from_u64(seed ^ i as u64))
