@@ -1,4 +1,4 @@
-use crate::{squared_euclidean_distance, ColorComponents};
+use crate::ColorComponents;
 
 use std::array;
 
@@ -48,6 +48,15 @@ impl Default for FloydSteinberg {
 }
 
 fn distance_table<const N: usize>(palette: &[[f32; N]]) -> (Vec<f32>, Vec<(u32x8, [f32x8; N])>) {
+    fn squared_euclidean_distance<const N: usize>(x: [f32; N], y: [f32; N]) -> f32 {
+        let mut dist = 0.0;
+        for c in 0..N {
+            let d = x[c] - y[c];
+            dist += d * d;
+        }
+        dist
+    }
+
     let k = palette.len();
     let mut distances = vec![(0, 0.0); k * k];
     #[allow(clippy::cast_possible_truncation)]

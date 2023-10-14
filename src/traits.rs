@@ -1,6 +1,6 @@
-use std::{alloc, iter::Sum, ops::AddAssign};
+use std::{alloc, iter::Sum};
 
-use num_traits::{AsPrimitive, Float, NumAssignOps, NumOps, Zero};
+use num_traits::{AsPrimitive, NumAssignOps, NumOps, Zero};
 use palette::cast::ArrayCast;
 
 pub trait ColorComponents<Component, const N: usize>:
@@ -11,19 +11,6 @@ pub trait ColorComponents<Component, const N: usize>:
 impl<Color, Component, const N: usize> ColorComponents<Component, N> for Color where
     Color: ArrayCast<Array = [Component; N]> + Copy + 'static
 {
-}
-
-#[inline]
-pub(crate) fn squared_euclidean_distance<F: Float + AddAssign, const N: usize>(
-    x: [F; N],
-    y: [F; N],
-) -> F {
-    let mut dist = F::zero();
-    for c in 0..N {
-        let d = x[c] - y[c];
-        dist += d * d;
-    }
-    dist
 }
 
 pub trait SumPromotion<Count>: Zero + Copy + Into<Self::Sum> + 'static
