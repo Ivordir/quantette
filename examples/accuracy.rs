@@ -22,7 +22,7 @@ use image::{buffer::ConvertBuffer, RgbImage, RgbaImage};
 use palette::{IntoColor, Lab, LinSrgb, Oklab, Srgb};
 use quantette::{
     dither::{Ditherer, FloydSteinberg},
-    kmeans, wu, ColorAndFrequency, ColorComponents, ColorSpace, PaletteSize, RemappableColorCounts,
+    kmeans, wu, ColorComponents, ColorCounts, ColorSpace, IndexedColorCounts, PaletteSize,
 };
 use rayon::prelude::*;
 use rgb::{FromSlice, RGB8, RGBA};
@@ -132,7 +132,7 @@ fn parse_palette_size(s: &str) -> Result<PaletteSize, String> {
 impl Options {
     fn num_samples<Color, Component, const N: usize>(
         &self,
-        color_counts: &impl ColorAndFrequency<Color, Component, N>,
+        color_counts: &impl ColorCounts<Color, Component, N>,
     ) -> u32
     where
         Color: ColorComponents<Component, N>,
@@ -213,7 +213,7 @@ fn main() {
         name_len: usize,
         convert_to: impl Fn(Srgb<u8>) -> Color + Sync,
         convert_from: impl Fn(Color) -> Srgb<u8> + Copy,
-        f: impl Fn(&RemappableColorCounts<Color, Component, N>, PaletteSize) -> (Vec<Color>, Vec<u8>)
+        f: impl Fn(&IndexedColorCounts<Color, Component, N>, PaletteSize) -> (Vec<Color>, Vec<u8>)
             + Copy,
     ) where
         Color: ColorComponents<Component, N> + Send + Sync,
@@ -221,8 +221,7 @@ fn main() {
     {
         each_image(options, images, name_len, |image| {
             let color_counts =
-                RemappableColorCounts::remappable_try_from_rgbimage_par(&image, &convert_to)
-                    .unwrap();
+                IndexedColorCounts::try_from_rgbimage_par(&image, &convert_to).unwrap();
 
             move |k| {
                 let (colors, mut indices) = f(&color_counts, k);
@@ -254,7 +253,7 @@ fn main() {
         options: &Options,
         images: Vec<(String, RgbImage)>,
         name_len: usize,
-        f: impl Fn(&RemappableColorCounts<Color, Component, N>, PaletteSize) -> (Vec<Color>, Vec<u8>)
+        f: impl Fn(&IndexedColorCounts<Color, Component, N>, PaletteSize) -> (Vec<Color>, Vec<u8>)
             + Copy,
     ) where
         Color: ColorComponents<Component, N> + Send + Sync,

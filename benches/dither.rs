@@ -12,14 +12,14 @@ use criterion::{
 use palette::{IntoColor, Oklab};
 use quantette::{
     dither::{Ditherer, FloydSteinberg},
-    wu, ColorSlice, ColorSpace, PaletteSize, RemappableColorCounts,
+    wu, ColorSlice, ColorSpace, IndexedColorCounts, PaletteSize,
 };
 
-fn bench<ColorFreq>(
+fn bench<ColorCount>(
     c: &mut Criterion,
     group: &str,
-    counts: &[(String, ColorFreq)],
-    mut f: impl FnMut(&mut Bencher<WallTime>, &(PaletteSize, &ColorFreq)),
+    counts: &[(String, ColorCount)],
+    mut f: impl FnMut(&mut Bencher<WallTime>, &(PaletteSize, &ColorCount)),
 ) {
     let mut group = c.benchmark_group(group);
     group
@@ -50,10 +50,9 @@ fn dither_oklab_single(c: &mut Criterion) {
                 path.clone(),
                 (
                     image,
-                    RemappableColorCounts::<Oklab, _, 3>::remappable_try_from_rgbimage_par(
-                        image,
-                        |srgb| srgb.into_linear().into_color(),
-                    )
+                    IndexedColorCounts::<Oklab, _, 3>::try_from_rgbimage_par(image, |srgb| {
+                        srgb.into_linear().into_color()
+                    })
                     .unwrap(),
                 ),
             )

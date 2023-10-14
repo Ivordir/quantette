@@ -22,7 +22,7 @@ use clap::{Parser, ValueEnum};
 use palette::{FromColor, IntoColor, LinSrgb, Oklab, Srgb};
 use quantette::{
     kmeans::{self, Centroids},
-    wu, ColorSpace, PaletteSize, UnmappableColorCounts,
+    wu, ColorSpace, PaletteSize, UniqueColorCounts,
 };
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -83,11 +83,10 @@ fn main() {
 
     let image = image::open(image).unwrap().into_rgb8();
 
-    let color_counts =
-        UnmappableColorCounts::<Oklab, _, 3>::unmappable_try_from_rgbimage_par(&image, |srgb| {
-            srgb.into_linear().into_color()
-        })
-        .unwrap();
+    let color_counts = UniqueColorCounts::<Oklab, _, 3>::try_from_rgbimage_par(&image, |srgb| {
+        srgb.into_linear().into_color()
+    })
+    .unwrap();
 
     let result = wu::palette_par(&color_counts, k, &ColorSpace::default_binner_oklab_f32());
 

@@ -44,9 +44,7 @@ pub mod wu;
 #[cfg(feature = "kmeans")]
 pub mod kmeans;
 
-pub use color_counts::{
-    ColorAndFrequency, ColorCounts, ColorRemap, RemappableColorCounts, UnmappableColorCounts,
-};
+pub use color_counts::{ColorCounts, ColorRemap, IndexedColorCounts, UniqueColorCounts};
 pub use traits::*;
 pub use types::*;
 

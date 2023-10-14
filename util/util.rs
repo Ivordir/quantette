@@ -7,7 +7,7 @@ use std::{
 
 use image::RgbImage;
 use palette::{IntoColor, Oklab, Srgb};
-use quantette::RemappableColorCounts;
+use quantette::IndexedColorCounts;
 
 pub fn load_images(images: &[PathBuf]) -> Vec<(String, RgbImage)> {
     images
@@ -40,13 +40,13 @@ pub fn load_image_dir(dir: impl AsRef<Path>) -> Vec<(String, RgbImage)> {
 
 pub fn to_oklab_counts(
     images: &[(String, RgbImage)],
-) -> Vec<(String, RemappableColorCounts<Oklab, f32, 3>)> {
+) -> Vec<(String, IndexedColorCounts<Oklab, f32, 3>)> {
     images
         .iter()
         .map(|(path, image)| {
             (
                 path.clone(),
-                RemappableColorCounts::remappable_try_from_rgbimage_par(image, |srgb| {
+                IndexedColorCounts::try_from_rgbimage_par(image, |srgb| {
                     srgb.into_linear().into_color()
                 })
                 .unwrap(),
@@ -57,14 +57,13 @@ pub fn to_oklab_counts(
 
 pub fn to_srgb_counts(
     images: &[(String, RgbImage)],
-) -> Vec<(String, RemappableColorCounts<Srgb<u8>, u8, 3>)> {
+) -> Vec<(String, IndexedColorCounts<Srgb<u8>, u8, 3>)> {
     images
         .iter()
         .map(|(path, image)| {
             (
                 path.clone(),
-                RemappableColorCounts::remappable_try_from_rgbimage_par(image, |srgb| srgb)
-                    .unwrap(),
+                IndexedColorCounts::try_from_rgbimage_par(image, |srgb| srgb).unwrap(),
             )
         })
         .collect()

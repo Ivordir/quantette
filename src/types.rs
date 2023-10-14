@@ -1,4 +1,4 @@
-use crate::{ColorAndFrequency, ColorComponents, ColorRemap, MAX_COLORS, MAX_PIXELS};
+use crate::{ColorComponents, ColorCounts, ColorRemap, MAX_COLORS, MAX_PIXELS};
 
 #[cfg(feature = "threads")]
 use crate::ParallelColorRemap;
@@ -163,7 +163,7 @@ pub struct QuantizeOutput<Color> {
 
 impl<Color> QuantizeOutput<Color> {
     fn trivial<Component, const N: usize>(
-        color_counts: &impl ColorAndFrequency<Color, Component, N>,
+        color_counts: &impl ColorCounts<Color, Component, N>,
         indices: Vec<u8>,
     ) -> Self
     where
@@ -180,7 +180,7 @@ impl<Color> QuantizeOutput<Color> {
     }
 
     pub(crate) fn trivial_palette<Component, const N: usize>(
-        color_counts: &impl ColorAndFrequency<Color, Component, N>,
+        color_counts: &impl ColorCounts<Color, Component, N>,
     ) -> Self
     where
         Color: ColorComponents<Component, N>,
@@ -189,7 +189,7 @@ impl<Color> QuantizeOutput<Color> {
     }
 
     pub(crate) fn trivial_quantize<Component, const N: usize>(
-        color_counts: &(impl ColorAndFrequency<Color, Component, N> + ColorRemap),
+        color_counts: &(impl ColorCounts<Color, Component, N> + ColorRemap),
     ) -> Self
     where
         Color: ColorComponents<Component, N>,
@@ -202,7 +202,7 @@ impl<Color> QuantizeOutput<Color> {
 
     #[cfg(feature = "threads")]
     pub(crate) fn trivial_quantize_par<Component, const N: usize>(
-        color_counts: &(impl ColorAndFrequency<Color, Component, N> + ParallelColorRemap),
+        color_counts: &(impl ColorCounts<Color, Component, N> + ParallelColorRemap),
     ) -> Self
     where
         Color: ColorComponents<Component, N>,

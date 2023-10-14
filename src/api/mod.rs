@@ -7,7 +7,7 @@ pub use colorspace::ColorSpace;
 pub use image_pipeline::*;
 pub use palette_pipeline::*;
 
-use crate::{ColorAndFrequency, ColorComponents};
+use crate::{ColorComponents, ColorCounts};
 
 #[cfg(feature = "kmeans")]
 use crate::{kmeans::Centroids, AboveMaxLen};
@@ -84,7 +84,7 @@ impl<Color> QuantizeMethod<Color> {
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn num_samples<Color, Component, const N: usize>(
     sampling_factor: f64,
-    color_counts: &impl ColorAndFrequency<Color, Component, N>,
+    color_counts: &impl ColorCounts<Color, Component, N>,
 ) -> u32
 where
     Color: ColorComponents<Component, N>,

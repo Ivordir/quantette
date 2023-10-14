@@ -11,11 +11,11 @@ use criterion::{
 };
 use quantette::{wu, ColorSlice, ColorSpace, PaletteSize};
 
-fn bench<ColorFreq>(
+fn bench<ColorCount>(
     c: &mut Criterion,
     group: &str,
-    counts: &[(String, ColorFreq)],
-    mut f: impl FnMut(&mut Bencher<WallTime>, &(PaletteSize, &ColorFreq)),
+    counts: &[(String, ColorCount)],
+    mut f: impl FnMut(&mut Bencher<WallTime>, &(PaletteSize, &ColorCount)),
 ) {
     let mut group = c.benchmark_group(group);
     group

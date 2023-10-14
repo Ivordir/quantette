@@ -7,7 +7,7 @@
 // Accessed from https://faculty.uca.edu/ecelebi/documents/JRTIP_2020a.pdf
 
 use crate::{
-    AboveMaxLen, ColorAndFrequency, ColorComponents, ColorRemap, QuantizeOutput, MAX_COLORS, MAX_K,
+    AboveMaxLen, ColorComponents, ColorCounts, ColorRemap, QuantizeOutput, MAX_COLORS, MAX_K,
 };
 
 #[cfg(feature = "threads")]
@@ -109,15 +109,15 @@ fn simd_argmin<const N: usize>(points: &[[f32x8; N]], query: [f32; N]) -> (u8, u
     }
 }
 
-struct State<'a, Color, Component, const N: usize, ColorFreq>
+struct State<'a, Color, Component, const N: usize, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static,
-    ColorFreq: ColorAndFrequency<Color, Component, N>,
+    ColorCount: ColorCounts<Color, Component, N>,
     f32: AsPrimitive<Component>,
 {
     _phatom: PhantomData<Component>,
-    color_counts: &'a ColorFreq,
+    color_counts: &'a ColorCount,
     components: Vec<[f32x8; N]>,
     counts: Vec<u32>,
     output: Vec<Color>,
@@ -127,7 +127,7 @@ impl<'a, Color, Component, const N: usize, ColorCount> State<'a, Color, Componen
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static,
-    ColorCount: ColorAndFrequency<Color, Component, N>,
+    ColorCount: ColorCounts<Color, Component, N>,
     f32: AsPrimitive<Component>,
 {
     fn new(color_counts: &'a ColorCount, centroids: Vec<Color>) -> Self {
@@ -222,11 +222,11 @@ where
         // WeightedAliasIndex::new fails if:
         // - The vector is empty => should be handled by caller
         // - The vector is longer than u32::MAX =>
-        //      ColorAndFrequency implementors guarantee length <= MAX_PIXELS = u32::MAX
+        //      ColorCounts implementors guarantee length <= MAX_PIXELS = u32::MAX
         // - For any weight w: w < 0 or w > max where max = W::MAX / weights.len() =>
         //      max count and max length are u32::MAX, so converting all counts to u64 will prevent this
         // - The sum of weights is zero =>
-        //      ColorAndFrequency implementors guarantee every count is > 0
+        //      ColorCounts implementors guarantee every count is > 0
         WeightedAliasIndex::new(counts.iter().copied().map(u64::from).collect()).unwrap()
     }
 
@@ -262,7 +262,7 @@ impl<'a, Color, Component, const N: usize, ColorCount> State<'a, Color, Componen
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static,
-    ColorCount: ColorAndFrequency<Color, Component, N> + ColorRemap,
+    ColorCount: ColorCounts<Color, Component, N> + ColorRemap,
     f32: AsPrimitive<Component>,
 {
     fn indices(&mut self) -> Vec<u8> {
@@ -280,7 +280,7 @@ where
 
 #[must_use]
 pub fn palette<Color, Component, const N: usize>(
-    color_counts: &impl ColorAndFrequency<Color, Component, N>,
+    color_counts: &impl ColorCounts<Color, Component, N>,
     num_samples: u32,
     initial_centroids: Centroids<Color>,
     seed: u64,
@@ -301,7 +301,7 @@ where
 
 #[must_use]
 pub fn indexed_palette<Color, Component, const N: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, N> + ColorRemap),
+    color_counts: &(impl ColorCounts<Color, Component, N> + ColorRemap),
     num_samples: u32,
     initial_centroids: Centroids<Color>,
     seed: u64,
@@ -326,7 +326,7 @@ impl<'a, Color, Component, const N: usize, ColorCount> State<'a, Color, Componen
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static + Send + Sync,
-    ColorCount: ColorAndFrequency<Color, Component, N>,
+    ColorCount: ColorCounts<Color, Component, N>,
     f32: AsPrimitive<Component>,
 {
     fn minibatch_kmeans_inner(
@@ -420,7 +420,7 @@ impl<'a, Color, Component, const N: usize, ColorCount> State<'a, Color, Componen
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static + Send + Sync,
-    ColorCount: ColorAndFrequency<Color, Component, N> + ParallelColorRemap,
+    ColorCount: ColorCounts<Color, Component, N> + ParallelColorRemap,
     f32: AsPrimitive<Component>,
 {
     fn indices_par(&mut self) -> Vec<u8> {
@@ -439,7 +439,7 @@ where
 #[cfg(feature = "threads")]
 #[must_use]
 pub fn palette_par<Color, Component, const N: usize>(
-    color_counts: &impl ColorAndFrequency<Color, Component, N>,
+    color_counts: &impl ColorCounts<Color, Component, N>,
     num_samples: u32,
     batch_size: u32,
     initial_centroids: Centroids<Color>,
@@ -462,7 +462,7 @@ where
 #[cfg(feature = "threads")]
 #[must_use]
 pub fn indexed_palette_par<Color, Component, const N: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, N> + ParallelColorRemap),
+    color_counts: &(impl ColorCounts<Color, Component, N> + ParallelColorRemap),
     num_samples: u32,
     batch_size: u32,
     initial_centroids: Centroids<Color>,

@@ -16,11 +16,11 @@ use quantette::{
 
 const BATCH_SIZE: u32 = 4096;
 
-fn bench<ColorFreq>(
+fn bench<ColorCount>(
     c: &mut Criterion,
     group: &str,
-    counts: &[(String, ColorFreq)],
-    mut f: impl FnMut(&mut Bencher<WallTime>, &(PaletteSize, &ColorFreq)),
+    counts: &[(String, ColorCount)],
+    mut f: impl FnMut(&mut Bencher<WallTime>, &(PaletteSize, &ColorCount)),
 ) {
     let mut group = c.benchmark_group(group);
     group
@@ -43,8 +43,8 @@ fn bench<ColorFreq>(
     }
 }
 
-fn num_samples<Color, Component, const N: usize, Indices>(
-    color_counts: &ColorCounts<Color, Component, N, Indices>,
+fn num_samples<Color, Component, const N: usize>(
+    color_counts: &impl ColorCounts<Color, Component, N>,
 ) -> u32
 where
     Color: ColorComponents<Component, N>,

@@ -2,8 +2,8 @@
 use super::num_samples;
 
 use crate::{
-    wu, ColorAndFrequency, ColorComponents, ColorSlice, ColorSpace, ImagePipeline, PaletteSize,
-    QuantizeMethod, UnmappableColorCounts,
+    wu, ColorComponents, ColorCounts, ColorSlice, ColorSpace, ImagePipeline, PaletteSize,
+    QuantizeMethod, UniqueColorCounts,
 };
 
 #[cfg(all(feature = "colorspaces", feature = "threads"))]
@@ -133,8 +133,7 @@ where
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
-                        let color_counts =
-                            UnmappableColorCounts::unmappable_u8_3_colors(colors, |c| c);
+                        let color_counts = UniqueColorCounts::new(colors, |c| c);
 
                         palette(
                             &color_counts,
@@ -213,7 +212,7 @@ where
         let quantize_method = Self::convert_quantize_method(quantize_method, &convert_to);
 
         let palette = if dedup_pixels {
-            let color_counts = UnmappableColorCounts::unmappable_u8_3_colors(colors, convert_to);
+            let color_counts = UniqueColorCounts::new(colors, convert_to);
             palette(&color_counts, k, quantize_method, binner)
         } else {
             let colors = convert_color_space(colors, convert_to);
@@ -241,8 +240,7 @@ where
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
-                        let color_counts =
-                            UnmappableColorCounts::unmappable_u8_3_colors_par(colors, |c| c);
+                        let color_counts = UniqueColorCounts::new_par(colors, |c| c);
 
                         palette_par(
                             &color_counts,
@@ -295,8 +293,7 @@ where
         let quantize_method = Self::convert_quantize_method(quantize_method, &convert_to);
 
         let palette = if dedup_pixels {
-            let color_counts =
-                UnmappableColorCounts::unmappable_u8_3_colors_par(colors, convert_to);
+            let color_counts = UniqueColorCounts::new_par(colors, convert_to);
 
             palette_par(&color_counts, k, quantize_method, binner)
         } else {
@@ -310,7 +307,7 @@ where
 }
 
 fn palette<Color, Component, const B: usize>(
-    color_counts: &impl ColorAndFrequency<Color, Component, 3>,
+    color_counts: &impl ColorCounts<Color, Component, 3>,
     k: PaletteSize,
     method: QuantizeMethod<Color>,
     binner: &impl Binner3<Component, B>,
@@ -341,7 +338,7 @@ where
 
 #[cfg(feature = "threads")]
 fn palette_par<Color, Component, const B: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, 3> + Send + Sync),
+    color_counts: &(impl ColorCounts<Color, Component, 3> + Send + Sync),
     k: PaletteSize,
     method: QuantizeMethod<Color>,
     binner: &(impl Binner3<Component, B> + Sync),

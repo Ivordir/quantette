@@ -5,7 +5,7 @@
 // https://doi.org/10.1145/146443.146475
 
 use crate::{
-    ColorAndFrequency, ColorComponents, ColorRemap, PaletteSize, QuantizeOutput, SumPromotion,
+    ColorComponents, ColorCounts, ColorRemap, PaletteSize, QuantizeOutput, SumPromotion,
     ZeroedIsZero,
 };
 
@@ -207,32 +207,32 @@ pub trait Binner3<T, const B: usize> {
     fn bin(&self, components: [T; N]) -> [u8; N];
 }
 
-struct Wu3<'a, Color, Component, Binner, const B: usize, ColorFreq>
+struct Wu3<'a, Color, Component, Binner, const B: usize, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: SumPromotion<u32>,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     Binner: Binner3<Component, B>,
-    ColorFreq: ColorAndFrequency<Color, Component, N>,
+    ColorCount: ColorCounts<Color, Component, N>,
     u32: Into<Component::Sum>,
 {
     _phantom: PhantomData<Color>,
-    color_counts: &'a ColorFreq,
+    color_counts: &'a ColorCount,
     binner: &'a Binner,
     hist: Box<Histogram3<Stats<Component::Sum, N>, B>>,
 }
 
-impl<'a, Color, Component, Binner, const B: usize, ColorFreq>
-    Wu3<'a, Color, Component, Binner, B, ColorFreq>
+impl<'a, Color, Component, Binner, const B: usize, ColorCount>
+    Wu3<'a, Color, Component, Binner, B, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: SumPromotion<u32>,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     Binner: Binner3<Component, B>,
-    ColorFreq: ColorAndFrequency<Color, Component, N>,
+    ColorCount: ColorCounts<Color, Component, N>,
     u32: Into<Component::Sum>,
 {
-    fn new(color_counts: &'a ColorFreq, binner: &'a Binner) -> Self {
+    fn new(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
         assert!((1..=256).contains(&B));
 
         Self {
@@ -287,7 +287,7 @@ where
         }
     }
 
-    fn from_color_counts(color_counts: &'a ColorFreq, binner: &'a Binner) -> Self {
+    fn from_color_counts(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
         let mut data = Self::new(color_counts, binner);
 
         if let Some(counts) = data.color_counts.counts() {
@@ -490,14 +490,14 @@ where
     }
 }
 
-impl<'a, Color, Component, Binner, const B: usize, ColorFreq>
-    Wu3<'a, Color, Component, Binner, B, ColorFreq>
+impl<'a, Color, Component, Binner, const B: usize, ColorCount>
+    Wu3<'a, Color, Component, Binner, B, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: SumPromotion<u32>,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     Binner: Binner3<Component, B>,
-    ColorFreq: ColorAndFrequency<Color, Component, N> + ColorRemap,
+    ColorCount: ColorCounts<Color, Component, N> + ColorRemap,
     u32: Into<Component::Sum>,
 {
     fn indexed_palette(&self, k: PaletteSize) -> QuantizeOutput<Color> {
@@ -517,17 +517,17 @@ where
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color, Component, Binner, const B: usize, ColorFreq>
-    Wu3<'a, Color, Component, Binner, B, ColorFreq>
+impl<'a, Color, Component, Binner, const B: usize, ColorCount>
+    Wu3<'a, Color, Component, Binner, B, ColorCount>
 where
     Color: ColorComponents<Component, N> + Send,
     Component: SumPromotion<u32> + Sync,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     Binner: Binner3<Component, B> + Sync,
-    ColorFreq: ColorAndFrequency<Color, Component, N> + Send + Sync,
+    ColorCount: ColorCounts<Color, Component, N> + Send + Sync,
     u32: Into<Component::Sum>,
 {
-    fn from_color_counts_par(color_counts: &'a ColorFreq, binner: &'a Binner) -> Self {
+    fn from_color_counts_par(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
         let chunk_size = color_counts.len().div_ceil(rayon::current_num_threads());
         let partials = if let Some(counts) = color_counts.counts() {
             color_counts
@@ -557,7 +557,7 @@ where
 
     fn merge_partials(
         mut partials: Vec<Self>,
-        color_counts: &'a ColorFreq,
+        color_counts: &'a ColorCount,
         binner: &'a Binner,
     ) -> Self {
         let mut data = partials
@@ -581,14 +581,14 @@ where
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color, Component, Binner, const B: usize, ColorFreq>
-    Wu3<'a, Color, Component, Binner, B, ColorFreq>
+impl<'a, Color, Component, Binner, const B: usize, ColorCount>
+    Wu3<'a, Color, Component, Binner, B, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: SumPromotion<u32> + Sync,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     Binner: Binner3<Component, B> + Sync,
-    ColorFreq: ColorAndFrequency<Color, Component, N> + ParallelColorRemap + Send + Sync,
+    ColorCount: ColorCounts<Color, Component, N> + ParallelColorRemap + Send + Sync,
     u32: Into<Component::Sum>,
 {
     fn quantize_par(&self, k: PaletteSize) -> QuantizeOutput<Color> {
@@ -608,7 +608,7 @@ where
 }
 
 pub fn palette<Color, Component, const B: usize>(
-    color_counts: &impl ColorAndFrequency<Color, Component, N>,
+    color_counts: &impl ColorCounts<Color, Component, N>,
     k: PaletteSize,
     binner: &impl Binner3<Component, B>,
 ) -> QuantizeOutput<Color>
@@ -626,7 +626,7 @@ where
 }
 
 pub fn indexed_palette<Color, Component, const B: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, N> + ColorRemap),
+    color_counts: &(impl ColorCounts<Color, Component, N> + ColorRemap),
     k: PaletteSize,
     binner: &impl Binner3<Component, B>,
 ) -> QuantizeOutput<Color>
@@ -645,7 +645,7 @@ where
 
 #[cfg(feature = "threads")]
 pub fn palette_par<Color, Component, const B: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, N> + Send + Sync),
+    color_counts: &(impl ColorCounts<Color, Component, N> + Send + Sync),
     k: PaletteSize,
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> QuantizeOutput<Color>
@@ -664,7 +664,7 @@ where
 
 #[cfg(feature = "threads")]
 pub fn indexed_palette_par<Color, Component, const B: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, N> + ParallelColorRemap + Send + Sync),
+    color_counts: &(impl ColorCounts<Color, Component, N> + ParallelColorRemap + Send + Sync),
     k: PaletteSize,
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> QuantizeOutput<Color>

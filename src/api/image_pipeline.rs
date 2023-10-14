@@ -3,8 +3,8 @@ use super::num_samples;
 
 use crate::{
     dither::{Ditherer, FloydSteinberg},
-    wu, ColorAndFrequency, ColorComponents, ColorRemap, ColorSlice, ColorSpace, PalettePipeline,
-    PaletteSize, QuantizeMethod, RemappableColorCounts,
+    wu, ColorComponents, ColorCounts, ColorRemap, ColorSlice, ColorSpace, IndexedColorCounts,
+    PalettePipeline, PaletteSize, QuantizeMethod,
 };
 
 #[cfg(all(feature = "colorspaces", feature = "threads"))]
@@ -167,8 +167,7 @@ where
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
-                        let color_counts =
-                            RemappableColorCounts::remappable_u8_3_colors(colors, |c| c);
+                        let color_counts = IndexedColorCounts::new(colors, |c| c);
 
                         indexed_palette(
                             &color_counts,
@@ -261,7 +260,7 @@ where
         let quantize_method = Self::convert_quantize_method(quantize_method, &convert_to);
 
         let (palette, indices) = if dedup_pixels {
-            let color_counts = RemappableColorCounts::remappable_u8_3_colors(colors, convert_to);
+            let color_counts = IndexedColorCounts::new(colors, convert_to);
             indexed_palette(
                 &color_counts,
                 width,
@@ -334,8 +333,7 @@ where
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
-                        let color_counts =
-                            RemappableColorCounts::remappable_u8_3_colors_par(colors, |c| c);
+                        let color_counts = IndexedColorCounts::new_par(colors, |c| c);
 
                         indexed_palette_par(
                             &color_counts,
@@ -401,8 +399,7 @@ where
         let quantize_method = Self::convert_quantize_method(quantize_method, &convert_to);
 
         let (palette, indices) = if dedup_pixels {
-            let color_counts =
-                RemappableColorCounts::remappable_u8_3_colors_par(colors, convert_to);
+            let color_counts = IndexedColorCounts::new_par(colors, convert_to);
 
             indexed_palette_par(
                 &color_counts,
@@ -448,7 +445,7 @@ impl<'a> ImagePipeline<'a, Srgb<u8>, 3> {
 }
 
 fn indexed_palette<Color, Component, const B: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, 3> + ColorRemap),
+    color_counts: &(impl ColorCounts<Color, Component, 3> + ColorRemap),
     width: u32,
     height: u32,
     k: PaletteSize,
@@ -504,7 +501,7 @@ where
 
 #[cfg(feature = "threads")]
 fn indexed_palette_par<Color, Component, const B: usize>(
-    color_counts: &(impl ColorAndFrequency<Color, Component, 3> + ParallelColorRemap + Send + Sync),
+    color_counts: &(impl ColorCounts<Color, Component, 3> + ParallelColorRemap + Send + Sync),
     width: u32,
     height: u32,
     k: PaletteSize,

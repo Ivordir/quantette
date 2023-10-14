@@ -11,7 +11,7 @@ use criterion::{
 };
 use image::RgbImage;
 use palette::{IntoColor, Oklab};
-use quantette::{RemappableColorCounts, UnmappableColorCounts};
+use quantette::{IndexedColorCounts, UniqueColorCounts};
 
 fn bench(c: &mut Criterion, group: &str, mut f: impl FnMut(&mut Bencher<WallTime>, &RgbImage)) {
     let mut group = c.benchmark_group(group);
@@ -46,17 +46,14 @@ fn bench(c: &mut Criterion, group: &str, mut f: impl FnMut(&mut Bencher<WallTime
 
 fn color_counts_srgb_palette_single(c: &mut Criterion) {
     bench(c, "color_counts_srgb_palette_single", |b, image| {
-        b.iter(|| {
-            UnmappableColorCounts::<_, _, 3>::unmappable_try_from_rgbimage(image, |srgb| srgb)
-                .unwrap()
-        })
+        b.iter(|| UniqueColorCounts::<_, _, 3>::try_from_rgbimage(image, |srgb| srgb).unwrap())
     });
 }
 
 fn color_counts_oklab_palette_single(c: &mut Criterion) {
     bench(c, "color_counts_oklab_palette_single", |b, image| {
         b.iter(|| {
-            UnmappableColorCounts::<Oklab, _, 3>::unmappable_try_from_rgbimage(image, |srgb| {
+            UniqueColorCounts::<Oklab, _, 3>::try_from_rgbimage(image, |srgb| {
                 srgb.into_linear().into_color()
             })
             .unwrap()
@@ -65,17 +62,14 @@ fn color_counts_oklab_palette_single(c: &mut Criterion) {
 }
 fn color_counts_srgb_remap_single(c: &mut Criterion) {
     bench(c, "color_counts_srgb_remap_single", |b, image| {
-        b.iter(|| {
-            RemappableColorCounts::<_, _, 3>::remappable_try_from_rgbimage(image, |srgb| srgb)
-                .unwrap()
-        })
+        b.iter(|| IndexedColorCounts::<_, _, 3>::try_from_rgbimage(image, |srgb| srgb).unwrap())
     });
 }
 
 fn color_counts_oklab_remap_single(c: &mut Criterion) {
     bench(c, "color_counts_oklab_remap_single", |b, image| {
         b.iter(|| {
-            RemappableColorCounts::<Oklab, _, 3>::remappable_try_from_rgbimage(image, |srgb| {
+            IndexedColorCounts::<Oklab, _, 3>::try_from_rgbimage(image, |srgb| {
                 srgb.into_linear().into_color()
             })
             .unwrap()
@@ -85,17 +79,14 @@ fn color_counts_oklab_remap_single(c: &mut Criterion) {
 
 fn color_counts_srgb_palette_par(c: &mut Criterion) {
     bench(c, "color_counts_srgb_palette_par", |b, image| {
-        b.iter(|| {
-            UnmappableColorCounts::<_, _, 3>::unmappable_try_from_rgbimage_par(image, |srgb| srgb)
-                .unwrap()
-        })
+        b.iter(|| UniqueColorCounts::<_, _, 3>::try_from_rgbimage_par(image, |srgb| srgb).unwrap())
     });
 }
 
 fn color_counts_oklab_palette_par(c: &mut Criterion) {
     bench(c, "color_counts_oklab_palette_par", |b, image| {
         b.iter(|| {
-            UnmappableColorCounts::<Oklab, _, 3>::unmappable_try_from_rgbimage_par(image, |srgb| {
+            UniqueColorCounts::<Oklab, _, 3>::try_from_rgbimage_par(image, |srgb| {
                 srgb.into_linear().into_color()
             })
             .unwrap()
@@ -105,17 +96,14 @@ fn color_counts_oklab_palette_par(c: &mut Criterion) {
 
 fn color_counts_srgb_remap_par(c: &mut Criterion) {
     bench(c, "color_counts_srgb_remap_par", |b, image| {
-        b.iter(|| {
-            RemappableColorCounts::<_, _, 3>::remappable_try_from_rgbimage_par(image, |srgb| srgb)
-                .unwrap()
-        })
+        b.iter(|| IndexedColorCounts::<_, _, 3>::try_from_rgbimage_par(image, |srgb| srgb).unwrap())
     });
 }
 
 fn color_counts_oklab_remap_par(c: &mut Criterion) {
     bench(c, "color_counts_oklab_remap_par", |b, image| {
         b.iter(|| {
-            RemappableColorCounts::<Oklab, _, 3>::remappable_try_from_rgbimage_par(image, |srgb| {
+            IndexedColorCounts::<Oklab, _, 3>::try_from_rgbimage_par(image, |srgb| {
                 srgb.into_linear().into_color()
             })
             .unwrap()
