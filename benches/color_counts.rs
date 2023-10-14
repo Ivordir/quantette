@@ -24,8 +24,8 @@ fn bench(c: &mut Criterion, group: &str, mut f: impl FnMut(&mut Bencher<WallTime
     for (path, image) in unsplash_images() {
         let (width, height) = image.dimensions();
         let pixels = width * height;
-        let mut w = 480;
-        let mut h = 270;
+        let mut w = 240;
+        let mut h = 135;
         let mut next_width = w * 2;
         let mut next_height = h * 2;
         while next_width * next_height < pixels {
