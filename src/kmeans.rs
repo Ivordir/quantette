@@ -336,6 +336,11 @@ where
         seed: u64,
         distribution: &(impl Distribution<usize> + Sync),
     ) {
+        // Used to prevent false sharing.
+        // Doesn't seem to make a noticeable difference, but it may on some hardware?
+        #[repr(align(64))]
+        struct Align64<T>(T);
+
         let Self { components, counts, color_counts, .. } = self;
 
         let colors = color_counts.color_components();
@@ -344,7 +349,7 @@ where
         let chunk_size = (batch_size as usize).div_ceil(threads);
 
         let mut rng = (0..threads)
-            .map(|i| Xoroshiro128PlusPlus::seed_from_u64(seed ^ i as u64))
+            .map(|i| Align64(Xoroshiro128PlusPlus::seed_from_u64(seed ^ i as u64)))
             .collect::<Vec<_>>();
 
         let mut batch = vec![[0.0.as_(); N]; batch_size as usize];
@@ -355,29 +360,13 @@ where
                 .par_chunks_mut(chunk_size)
                 .zip(assignments.par_chunks_mut(chunk_size))
                 .zip(&mut rng)
-                .for_each(|((batch, assignments), rng)| {
-                    for (chunk, assignments) in batch
-                        .chunks_exact_mut(4)
-                        .zip(assignments.chunks_exact_mut(4))
-                    {
-                        for color in &mut *chunk {
-                            *color = colors[distribution.sample(rng)];
-                        }
-
-                        for (center, color) in assignments.iter_mut().zip(&*chunk) {
-                            let color = color.map(Into::into);
-                            *center = simd_argmin(components, color);
-                        }
-                    }
-                    for (color, center) in batch
-                        .chunks_exact_mut(4)
-                        .into_remainder()
-                        .iter_mut()
-                        .zip(assignments.chunks_exact_mut(4).into_remainder())
-                    {
+                .for_each(|((batch, assignments), Align64(rng))| {
+                    for color in &mut *batch {
                         *color = colors[distribution.sample(rng)];
-                        let color = color.map(Into::into);
-                        *center = simd_argmin(components, color);
+                    }
+
+                    for (color, center) in batch.iter().zip(assignments) {
+                        *center = simd_argmin(components, color.map(Into::into));
                     }
                 });
 
