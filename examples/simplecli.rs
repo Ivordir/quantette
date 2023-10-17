@@ -18,7 +18,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use image::RgbImage;
 use palette::{cast::IntoComponents, Srgb};
 use quantette::{
-    dither::FloydSteinberg, ColorSpace, ImagePipeline, KmeansOptions, PaletteSize, QuantizeMethod,
+    ColorSpace, FloydSteinberg, ImagePipeline, KmeansOptions, PaletteSize, QuantizeMethod,
 };
 use rayon::prelude::*;
 use rgb::FromSlice;
@@ -66,11 +66,11 @@ enum Quantizer {
         #[arg(long)]
         dither: bool,
 
-        #[arg(long, default_value_t = FloydSteinberg::DEFAULT_STRENGTH)]
-        dither_strength: f32,
+        #[arg(long, default_value_t = FloydSteinberg::DEFAULT_ERROR_DIFFUSION)]
+        dither_error_diffusion: f32,
 
         #[arg(long, default_value_t = 0.5)]
-        sampling_factor: f64,
+        sampling_factor: f32,
 
         #[arg(long, default_value_t = 4096)]
         batch_size: u32,
@@ -144,7 +144,7 @@ fn main() {
         Quantizer::Quantette {
             colorspace,
             dither,
-            dither_strength,
+            dither_error_diffusion,
             kmeans,
             sampling_factor,
             batch_size,
@@ -155,7 +155,8 @@ fn main() {
 
             let method = if kmeans {
                 QuantizeMethod::Kmeans(
-                    KmeansOptions::new(sampling_factor)
+                    KmeansOptions::new()
+                        .sampling_factor(sampling_factor)
                         .batch_size(batch_size)
                         .seed(seed),
                 )
@@ -169,7 +170,7 @@ fn main() {
                 .quantize_method(method)
                 .colorspace(colorspace)
                 .dither(dither)
-                .dither_strength(dither_strength)
+                .dither_error_diffusion(dither_error_diffusion)
                 .palette_size(k);
 
             log!(

@@ -1,7 +1,7 @@
 #[path = "../util/util.rs"]
 mod util;
 
-use util::{to_oklab_counts, to_srgb_counts, unsplash_images};
+use util::{to_oklab_counts, unsplash_images};
 
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ use criterion::{
 };
 use quantette::{
     kmeans::{self, Centroids},
-    wu, ColorComponents, ColorCounts, ColorSpace, PaletteSize,
+    wu, ColorComponents, ColorCounts, ColorSlice, ColorSpace, PaletteSize,
 };
 
 const BATCH_SIZE: u32 = 4096;
@@ -45,18 +45,37 @@ fn bench<ColorCount>(
 
 fn num_samples<Color, Component, const N: usize>(
     color_counts: &impl ColorCounts<Color, Component, N>,
+    sampling_factor: f32,
 ) -> u32
 where
     Color: ColorComponents<Component, N>,
 {
-    color_counts.num_colors() / 2
+    (f64::from(color_counts.num_colors()) * f64::from(sampling_factor)) as u32
+}
+
+fn num_samples_oklab<Color, Component, const N: usize>(
+    color_counts: &impl ColorCounts<Color, Component, N>,
+) -> u32
+where
+    Color: ColorComponents<Component, N>,
+{
+    num_samples(color_counts, 0.5)
+}
+
+fn num_samples_srgb<Color, Component, const N: usize>(
+    color_counts: &impl ColorCounts<Color, Component, N>,
+) -> u32
+where
+    Color: ColorComponents<Component, N>,
+{
+    num_samples(color_counts, 0.1)
 }
 
 fn kmeans_oklab_palette_single(c: &mut Criterion) {
     let counts = to_oklab_counts(unsplash_images());
     bench(
         c,
-        "online_oklab_palette_single",
+        "kmeans_oklab_palette_single",
         &counts,
         |b, &(k, counts)| {
             let initial_centroids: Centroids<_> =
@@ -68,7 +87,7 @@ fn kmeans_oklab_palette_single(c: &mut Criterion) {
             b.iter(|| {
                 kmeans::palette::<_, _, 3>(
                     counts,
-                    num_samples(counts),
+                    num_samples_oklab(counts),
                     initial_centroids.clone(),
                     0,
                 )
@@ -78,22 +97,23 @@ fn kmeans_oklab_palette_single(c: &mut Criterion) {
 }
 
 fn kmeans_srgb_palette_single(c: &mut Criterion) {
-    let counts = to_srgb_counts(unsplash_images());
     bench(
         c,
-        "online_srgb_palette_single",
-        &counts,
-        |b, &(k, counts)| {
+        "kmeans_srgb_palette_single",
+        unsplash_images(),
+        |b, &(k, image)| {
+            let slice = &ColorSlice::try_from(image).unwrap();
+
             let initial_centroids: Centroids<_> =
-                wu::palette(counts, k, &ColorSpace::default_binner_srgb_u8())
+                wu::palette(slice, k, &ColorSpace::default_binner_srgb_u8())
                     .palette
                     .try_into()
                     .unwrap();
 
             b.iter(|| {
                 kmeans::palette::<_, _, 3>(
-                    counts,
-                    num_samples(counts),
+                    slice,
+                    num_samples_srgb(slice),
                     initial_centroids.clone(),
                     0,
                 )
@@ -106,7 +126,7 @@ fn kmeans_oklab_remap_single(c: &mut Criterion) {
     let counts = to_oklab_counts(unsplash_images());
     bench(
         c,
-        "online_oklab_remap_single",
+        "kmeans_oklab_remap_single",
         &counts,
         |b, &(k, counts)| {
             let initial_centroids: Centroids<_> =
@@ -118,7 +138,7 @@ fn kmeans_oklab_remap_single(c: &mut Criterion) {
             b.iter(|| {
                 kmeans::indexed_palette::<_, _, 3>(
                     counts,
-                    num_samples(counts),
+                    num_samples_oklab(counts),
                     initial_centroids.clone(),
                     0,
                 )
@@ -128,43 +148,23 @@ fn kmeans_oklab_remap_single(c: &mut Criterion) {
 }
 
 fn kmeans_srgb_remap_single(c: &mut Criterion) {
-    let counts = to_srgb_counts(unsplash_images());
-    bench(c, "online_srgb_remap_single", &counts, |b, &(k, counts)| {
-        let initial_centroids: Centroids<_> =
-            wu::palette(counts, k, &ColorSpace::default_binner_srgb_u8())
-                .palette
-                .try_into()
-                .unwrap();
-
-        b.iter(|| {
-            kmeans::indexed_palette::<_, _, 3>(
-                counts,
-                num_samples(counts),
-                initial_centroids.clone(),
-                0,
-            )
-        })
-    })
-}
-
-fn kmeans_oklab_palette_par(c: &mut Criterion) {
-    let counts = to_oklab_counts(unsplash_images());
     bench(
         c,
-        "minibatch_oklab_palette_par",
-        &counts,
-        |b, &(k, counts)| {
+        "kmeans_srgb_remap_single",
+        unsplash_images(),
+        |b, &(k, image)| {
+            let slice = &ColorSlice::try_from(image).unwrap();
+
             let initial_centroids: Centroids<_> =
-                wu::palette(counts, k, &ColorSpace::default_binner_oklab_f32())
+                wu::palette(slice, k, &ColorSpace::default_binner_srgb_u8())
                     .palette
                     .try_into()
                     .unwrap();
 
             b.iter(|| {
-                kmeans::palette_par::<_, _, 3>(
-                    counts,
-                    num_samples(counts),
-                    BATCH_SIZE,
+                kmeans::indexed_palette::<_, _, 3>(
+                    slice,
+                    num_samples_srgb(slice),
                     initial_centroids.clone(),
                     0,
                 )
@@ -173,23 +173,45 @@ fn kmeans_oklab_palette_par(c: &mut Criterion) {
     )
 }
 
+fn kmeans_oklab_palette_par(c: &mut Criterion) {
+    let counts = to_oklab_counts(unsplash_images());
+    bench(c, "kmeans_oklab_palette_par", &counts, |b, &(k, counts)| {
+        let initial_centroids: Centroids<_> =
+            wu::palette(counts, k, &ColorSpace::default_binner_oklab_f32())
+                .palette
+                .try_into()
+                .unwrap();
+
+        b.iter(|| {
+            kmeans::palette_par::<_, _, 3>(
+                counts,
+                num_samples_oklab(counts),
+                BATCH_SIZE,
+                initial_centroids.clone(),
+                0,
+            )
+        })
+    })
+}
+
 fn kmeans_srgb_palette_par(c: &mut Criterion) {
-    let counts = to_srgb_counts(unsplash_images());
     bench(
         c,
-        "minibatch_srgb_palette_par",
-        &counts,
-        |b, &(k, counts)| {
+        "kmeans_srgb_palette_par",
+        unsplash_images(),
+        |b, &(k, image)| {
+            let slice = &ColorSlice::try_from(image).unwrap();
+
             let initial_centroids: Centroids<_> =
-                wu::palette(counts, k, &ColorSpace::default_binner_srgb_u8())
+                wu::palette(slice, k, &ColorSpace::default_binner_srgb_u8())
                     .palette
                     .try_into()
                     .unwrap();
 
             b.iter(|| {
                 kmeans::palette_par::<_, _, 3>(
-                    counts,
-                    num_samples(counts),
+                    slice,
+                    num_samples_srgb(slice),
                     BATCH_SIZE,
                     initial_centroids.clone(),
                     0,
@@ -201,35 +223,9 @@ fn kmeans_srgb_palette_par(c: &mut Criterion) {
 
 fn kmeans_oklab_remap_par(c: &mut Criterion) {
     let counts = to_oklab_counts(unsplash_images());
-    bench(
-        c,
-        "minibatch_oklab_remap_par",
-        &counts,
-        |b, &(k, counts)| {
-            let initial_centroids: Centroids<_> =
-                wu::palette(counts, k, &ColorSpace::default_binner_oklab_f32())
-                    .palette
-                    .try_into()
-                    .unwrap();
-
-            b.iter(|| {
-                kmeans::indexed_palette_par::<_, _, 3>(
-                    counts,
-                    num_samples(counts),
-                    BATCH_SIZE,
-                    initial_centroids.clone(),
-                    0,
-                )
-            })
-        },
-    )
-}
-
-fn kmeans_srgb_remap_par(c: &mut Criterion) {
-    let counts = to_srgb_counts(unsplash_images());
-    bench(c, "minibatch_srgb_remap_par", &counts, |b, &(k, counts)| {
+    bench(c, "kmeans_oklab_remap_par", &counts, |b, &(k, counts)| {
         let initial_centroids: Centroids<_> =
-            wu::palette(counts, k, &ColorSpace::default_binner_srgb_u8())
+            wu::palette(counts, k, &ColorSpace::default_binner_oklab_f32())
                 .palette
                 .try_into()
                 .unwrap();
@@ -237,13 +233,40 @@ fn kmeans_srgb_remap_par(c: &mut Criterion) {
         b.iter(|| {
             kmeans::indexed_palette_par::<_, _, 3>(
                 counts,
-                num_samples(counts),
+                num_samples_oklab(counts),
                 BATCH_SIZE,
                 initial_centroids.clone(),
                 0,
             )
         })
     })
+}
+
+fn kmeans_srgb_remap_par(c: &mut Criterion) {
+    bench(
+        c,
+        "kmeans_srgb_remap_par",
+        unsplash_images(),
+        |b, &(k, image)| {
+            let slice = &ColorSlice::try_from(image).unwrap();
+
+            let initial_centroids: Centroids<_> =
+                wu::palette(slice, k, &ColorSpace::default_binner_srgb_u8())
+                    .palette
+                    .try_into()
+                    .unwrap();
+
+            b.iter(|| {
+                kmeans::indexed_palette_par::<_, _, 3>(
+                    slice,
+                    num_samples_srgb(slice),
+                    BATCH_SIZE,
+                    initial_centroids.clone(),
+                    0,
+                )
+            })
+        },
+    )
 }
 
 criterion_group!(

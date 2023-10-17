@@ -6,7 +6,7 @@ use std::{
 };
 
 use image::RgbImage;
-use palette::{IntoColor, Oklab, Srgb};
+use palette::{IntoColor, Oklab};
 use quantette::IndexedColorCounts;
 
 pub fn load_images(images: &[PathBuf]) -> Vec<(String, RgbImage)> {
@@ -50,20 +50,6 @@ pub fn to_oklab_counts(
                     srgb.into_linear().into_color()
                 })
                 .unwrap(),
-            )
-        })
-        .collect()
-}
-
-pub fn to_srgb_counts(
-    images: &[(String, RgbImage)],
-) -> Vec<(String, IndexedColorCounts<Srgb<u8>, u8, 3>)> {
-    images
-        .iter()
-        .map(|(path, image)| {
-            (
-                path.clone(),
-                IndexedColorCounts::try_from_rgbimage_par(image, |srgb| srgb).unwrap(),
             )
         })
         .collect()

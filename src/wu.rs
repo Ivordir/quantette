@@ -1,3 +1,14 @@
+//! Wu's color quantizer (Greedy Orthogonal Bipartitioning).
+//!
+//! This preclustering method recursively splits the histogram box with the greatest variance
+//! along the dimension and bin that results in the greatest decrease in variance.
+//! It should give much better results than median cut
+//! while having nearly the same computational cost.
+//!
+//! A binner with `32` bins (`B = 32`) is a good compromise between speed and accuracy.
+//! If the [`PaletteSize`] is small, less bins can be used without sacrificing accuracy too much.
+//! Otherwise, use more bins (e.g., `64`) if you want greater accuracy.
+
 // Referenced code: https://www.ece.mcmaster.ca/~xwu/cq.c
 // and relevant paper (free access):
 // Xiaolin Wu, Color quantization by dynamic programming and principal analysis,
@@ -5,7 +16,7 @@
 // https://doi.org/10.1145/146443.146475
 
 use crate::{
-    ColorComponents, ColorCounts, ColorRemap, PaletteSize, QuantizeOutput, SumPromotion,
+    ColorComponents, ColorCounts, ColorCountsRemap, PaletteSize, QuantizeOutput, SumPromotion,
     ZeroedIsZero,
 };
 
@@ -21,25 +32,31 @@ use ordered_float::OrderedFloat;
 use palette::cast;
 
 #[cfg(feature = "threads")]
-use crate::ParallelColorRemap;
+use crate::ColorCountsParallelRemap;
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
 
+/// The number of components in the color types. Only 3 components are supported for now.
 const N: usize = 3;
 
+/// A hypercube over a multi-dimensional range of histogram bins.
 #[derive(Clone, Copy, Default)]
 struct Cube {
+    /// The lower bin indices (inclusive).
     min: [u8; N],
+    /// The upper bin indices (exclusive).
     max: [u8; N],
 }
 
 impl Cube {
+    /// Whether or not this cube contains a single bin.
     fn is_single_bin(self) -> bool {
         let Self { min, max } = self;
         (0..N).all(|c| max[c] - min[c] == 1)
     }
 }
 
+/// A new type wrapper around a 3-dimensional array.
 #[repr(transparent)]
 #[derive(Clone, Copy)]
 struct Histogram3<T, const B: usize>([[[T; B]; B]; B]);
@@ -84,12 +101,16 @@ impl<T, const B: usize> IndexMut<[u8; N]> for Histogram3<T, B> {
     }
 }
 
-#[derive(Clone, Copy)]
+/// Statistics for a histogram bin.
 #[repr(align(64))]
+#[derive(Clone, Copy)]
 struct Stats<T, const N: usize> {
+    /// The number of pixels/colors assigned to the bin.
     count: u32,
+    /// The component-wise sum of the colors assigned to the bin.
     components: [T; N],
-    squared: f64,
+    /// The sum of the squared components of the colors assigned to the bin.
+    sum_squared: f64,
 }
 
 #[allow(unsafe_code)] // all inner types impl ZeroedIsZero
@@ -110,7 +131,7 @@ impl<T: Copy + Add<Output = T>, const N: usize> Add for Stats<T, N> {
         Self {
             count: self.count + rhs.count,
             components: array::from_fn(|i| self.components[i] + rhs.components[i]),
-            squared: self.squared + rhs.squared,
+            sum_squared: self.sum_squared + rhs.sum_squared,
         }
     }
 }
@@ -123,7 +144,7 @@ impl<T: Copy + Sub<Output = T>, const N: usize> Sub for Stats<T, N> {
         Self {
             count: self.count - rhs.count,
             components: array::from_fn(|i| self.components[i] - rhs.components[i]),
-            squared: self.squared - rhs.squared,
+            sum_squared: self.sum_squared - rhs.sum_squared,
         }
     }
 }
@@ -135,7 +156,7 @@ impl<T: Copy + AddAssign, const N: usize> AddAssign for Stats<T, N> {
         for i in 0..N {
             self.components[i] += rhs.components[i];
         }
-        self.squared += rhs.squared;
+        self.sum_squared += rhs.sum_squared;
     }
 }
 
@@ -144,15 +165,16 @@ impl<T: Copy + Zero, const N: usize> Zero for Stats<T, N> {
         Self {
             count: 0,
             components: [T::zero(); N],
-            squared: 0.0,
+            sum_squared: 0.0,
         }
     }
 
     fn is_zero(&self) -> bool {
-        self.count == 0 && self.squared == 0.0 && self.components.iter().all(Zero::is_zero)
+        self.count == 0 && self.sum_squared == 0.0 && self.components.iter().all(Zero::is_zero)
     }
 }
 
+/// This macro generates code for a fixed number of recursive calls to a volume function.
 macro_rules! ndvolume {
     ($self: ident, $min: ident, $max: ident, $index: ident; $n: literal $(, $ns: literal)* $(,)?) => {{
         $index[$n] = $max[$n] - 1;
@@ -173,11 +195,14 @@ macro_rules! ndvolume {
 }
 
 impl<T: Copy + Zero + Add<Output = T> + Sub<Output = T>, const B: usize> Histogram3<T, B> {
+    /// Returns the sum of the histogram bins specified by the given cube.
     fn volume(&self, Cube { min, max }: Cube) -> T {
         let mut index = [0u8; N];
         ndvolume!(self, min, max, index; 0, 1, 2)
     }
 
+    /// Returns the sum of the histogram bins specified by the given cube
+    /// but with one of the dimensions fixed to the given bin.
     fn volume_at(&self, Cube { min, max }: Cube, dim: u8, bin: u8) -> T {
         if bin == 0 {
             T::zero()
@@ -203,10 +228,17 @@ impl<T: Copy + Zero + Add<Output = T> + Sub<Output = T>, const B: usize> Histogr
     }
 }
 
+/// An interface for taking colors with 3 components and returning a 3-dimensional histogram bin index.
+///
+/// The returned indices should be less than `B`.
 pub trait Binner3<T, const B: usize> {
+    /// Returns the 3-dimensional histogram bin index for the given color components.
+    ///
+    /// Each index must be less than `B`. It is recommended to mark implementations of this function as `inline`.
     fn bin(&self, components: [T; N]) -> [u8; N];
 }
 
+/// The struct holding the data for Wu's color quantization method (for 3 dimensions).
 struct Wu3<'a, Color, Component, Binner, const B: usize, ColorCount>
 where
     Color: ColorComponents<Component, N>,
@@ -216,9 +248,13 @@ where
     ColorCount: ColorCounts<Color, Component, N>,
     u32: Into<Component::Sum>,
 {
+    /// The color type must remain the same for each [`Wu3`].
     _phantom: PhantomData<Color>,
+    /// The color and count data.
     color_counts: &'a ColorCount,
+    /// The histogram binner to use.
     binner: &'a Binner,
+    /// The histogram data.
     hist: Box<Histogram3<Stats<Component::Sum, N>, B>>,
 }
 
@@ -232,7 +268,8 @@ where
     ColorCount: ColorCounts<Color, Component, N>,
     u32: Into<Component::Sum>,
 {
-    fn new(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
+    /// Creates a new [`Wu3`] with zeored histogram data.
+    fn new_zero(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
         assert!((1..=256).contains(&B));
 
         Self {
@@ -243,10 +280,11 @@ where
         }
     }
 
+    /// Adds the given color with the given count to the histogram.
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn add_color(&mut self, color: [Component; N], n: u32) {
-        let Stats { count, components, squared } = &mut self.hist[self.binner.bin(color)];
+        let Stats { count, components, sum_squared } = &mut self.hist[self.binner.bin(color)];
         let color = color.map(Into::into);
 
         *count += n;
@@ -257,9 +295,10 @@ where
         }
 
         let w = f64::from(n);
-        *squared += w * Self::sum_of_squares(color);
+        *sum_squared += w * Self::sum_of_squares(color);
     }
 
+    /// Adds the given colors to the histogram.
     fn add_colors(&mut self, colors: &[[Component; N]]) {
         for colors in colors.chunks_exact(4) {
             for &color in colors {
@@ -271,6 +310,7 @@ where
         }
     }
 
+    /// Adds the given colors and their counts to the histogram.
     fn add_color_counts(&mut self, colors: &[[Component; N]], counts: &[u32]) {
         for (colors, counts) in colors.chunks_exact(4).zip(counts.chunks_exact(4)) {
             for (&color, &n) in colors.iter().zip(counts) {
@@ -287,8 +327,9 @@ where
         }
     }
 
-    fn from_color_counts(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
-        let mut data = Self::new(color_counts, binner);
+    /// Creates a new [`Wu3`] with histogram data filled by the given `color_counts`.
+    fn new(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
+        let mut data = Self::new_zero(color_counts, binner);
 
         if let Some(counts) = data.color_counts.counts() {
             data.add_color_counts(data.color_counts.color_components(), counts);
@@ -301,6 +342,7 @@ where
         data
     }
 
+    /// Creates moments from the histogram bins to allow inclusion-excluison lookups/calculations.
     fn calc_cumulative_moments(&mut self) {
         let hist = &mut self.hist;
 
@@ -326,6 +368,7 @@ where
         }
     }
 
+    /// Returns the sum of the squares of the given components.
     #[inline]
     fn sum_of_squares(components: [Component::Sum; N]) -> f64 {
         let mut square = 0.0;
@@ -336,15 +379,17 @@ where
         square
     }
 
+    /// Computes the variance of the given cube.
     fn variance(&self, cube: Cube) -> f64 {
         if cube.is_single_bin() {
             0.0
         } else {
-            let Stats { count, components, squared } = self.hist.volume(cube);
-            squared - Self::sum_of_squares(components) / f64::from(count)
+            let Stats { count, components, sum_squared } = self.hist.volume(cube);
+            sum_squared - Self::sum_of_squares(components) / f64::from(count)
         }
     }
 
+    /// Finds the index of the bin to cut along for the given dimension in order to minimize variance.
     fn minimize(&self, cube: Cube, dim: u8, sum: Stats<Component::Sum, N>) -> Option<(u8, f64)> {
         let d = usize::from(dim);
         let bottom = cube.min[d];
@@ -367,6 +412,7 @@ where
             .min_by_key(|&(_, v)| OrderedFloat(v))
     }
 
+    /// Attempts to cut the given cube to give a lower variance.
     fn cut(&self, cube: &mut Cube) -> Option<Cube> {
         let sum = self.hist.volume(*cube);
 
@@ -388,7 +434,9 @@ where
         }
     }
 
+    /// Returns the disjoint cubes resulting from Wu's color quantization method.
     fn cubes(&self, k: PaletteSize) -> impl Iterator<Item = Cube> {
+        /// A cube and it's variance.
         struct CubeVar(Cube, f64);
 
         impl PartialOrd for CubeVar {
@@ -442,6 +490,7 @@ where
         queue.into_iter().map(|x| x.0)
     }
 
+    /// Returns the average color of and the number of colors in the given cube.
     fn cube_color_and_count(&self, cube: Cube) -> (Color, u32) {
         let Stats { count, components, .. } = self.hist.volume(cube);
         debug_assert!(count > 0);
@@ -452,6 +501,7 @@ where
         (color, count)
     }
 
+    /// Computes the color palette.
     fn palette(&self, k: PaletteSize) -> QuantizeOutput<Color> {
         let (palette, counts) = self
             .cubes(k)
@@ -461,10 +511,8 @@ where
         QuantizeOutput { palette, counts, indices: Vec::new() }
     }
 
-    fn quantize_and_lookup(
-        &self,
-        k: PaletteSize,
-    ) -> (Vec<Color>, Vec<u32>, Box<Histogram3<u8, B>>) {
+    /// Computes the color palette and the color for each histogram bin.
+    fn palette_and_lookup(&self, k: PaletteSize) -> (Vec<Color>, Vec<u32>, Box<Histogram3<u8, B>>) {
         let mut lookup = Histogram3::box_zeroed();
 
         let (colors, counts) = self
@@ -497,11 +545,12 @@ where
     Component: SumPromotion<u32>,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     Binner: Binner3<Component, B>,
-    ColorCount: ColorCounts<Color, Component, N> + ColorRemap,
+    ColorCount: ColorCountsRemap<Color, Component, N>,
     u32: Into<Component::Sum>,
 {
+    /// Computes the color palette and indices into it.
     fn indexed_palette(&self, k: PaletteSize) -> QuantizeOutput<Color> {
-        let (palette, counts, lookup) = self.quantize_and_lookup(k);
+        let (palette, counts, lookup) = self.palette_and_lookup(k);
 
         let indices = self
             .color_counts
@@ -527,7 +576,8 @@ where
     ColorCount: ColorCounts<Color, Component, N> + Send + Sync,
     u32: Into<Component::Sum>,
 {
-    fn from_color_counts_par(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
+    /// Creates a new [`Wu3`] in parallel with histogram data filled by the given `color_counts`.
+    fn new_par(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
         let chunk_size = color_counts.len().div_ceil(rayon::current_num_threads());
         let partials = if let Some(counts) = color_counts.counts() {
             color_counts
@@ -535,7 +585,7 @@ where
                 .par_chunks(chunk_size)
                 .zip(counts.par_chunks(chunk_size))
                 .map(|(colors, counts)| {
-                    let mut data = Self::new(color_counts, binner);
+                    let mut data = Self::new_zero(color_counts, binner);
                     data.add_color_counts(colors, counts);
                     data
                 })
@@ -545,7 +595,7 @@ where
                 .color_components()
                 .par_chunks(chunk_size)
                 .map(|colors| {
-                    let mut data = Self::new(color_counts, binner);
+                    let mut data = Self::new_zero(color_counts, binner);
                     data.add_colors(colors);
                     data
                 })
@@ -555,6 +605,8 @@ where
         Self::merge_partials(partials, color_counts, binner)
     }
 
+    /// Merges multiple [`Wu3`]s together by element-wise summing their histogram bins together
+    /// and then computing cumulative moments on the final histogram.
     fn merge_partials(
         mut partials: Vec<Self>,
         color_counts: &'a ColorCount,
@@ -562,7 +614,7 @@ where
     ) -> Self {
         let mut data = partials
             .pop()
-            .unwrap_or_else(|| Self::new(color_counts, binner));
+            .unwrap_or_else(|| Self::new_zero(color_counts, binner));
 
         for other in partials {
             for x in 0..B {
@@ -588,11 +640,12 @@ where
     Component: SumPromotion<u32> + Sync,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     Binner: Binner3<Component, B> + Sync,
-    ColorCount: ColorCounts<Color, Component, N> + ParallelColorRemap + Send + Sync,
+    ColorCount: ColorCountsParallelRemap<Color, Component, N> + Send + Sync,
     u32: Into<Component::Sum>,
 {
-    fn quantize_par(&self, k: PaletteSize) -> QuantizeOutput<Color> {
-        let (palette, counts, lookup) = self.quantize_and_lookup(k);
+    /// Computes the color palette and indices into it in parallel.
+    fn indexed_palette_par(&self, k: PaletteSize) -> QuantizeOutput<Color> {
+        let (palette, counts, lookup) = self.palette_and_lookup(k);
 
         let indices = self
             .color_counts
@@ -607,9 +660,11 @@ where
     }
 }
 
+/// Computes a color palette from the given `color_counts`
+/// with at most `palette_size` entries and using the given `binner`.
 pub fn palette<Color, Component, const B: usize>(
     color_counts: &impl ColorCounts<Color, Component, N>,
-    k: PaletteSize,
+    palette_size: PaletteSize,
     binner: &impl Binner3<Component, B>,
 ) -> QuantizeOutput<Color>
 where
@@ -618,16 +673,19 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     u32: Into<Component::Sum>,
 {
-    if color_counts.num_colors() <= u32::from(k.into_inner()) {
-        QuantizeOutput::trivial_palette(color_counts)
+    if let Some(output) = QuantizeOutput::trivial_palette(color_counts, palette_size) {
+        output
     } else {
-        Wu3::from_color_counts(color_counts, binner).palette(k)
+        Wu3::new(color_counts, binner).palette(palette_size)
     }
 }
 
+/// Computes a color palette from the given `color_counts`
+/// with at most `palette_size` entries and using the given `binner`.
+/// The returned [`QuantizeOutput`] will have its `indices` populated.
 pub fn indexed_palette<Color, Component, const B: usize>(
-    color_counts: &(impl ColorCounts<Color, Component, N> + ColorRemap),
-    k: PaletteSize,
+    color_counts: &impl ColorCountsRemap<Color, Component, N>,
+    palette_size: PaletteSize,
     binner: &impl Binner3<Component, B>,
 ) -> QuantizeOutput<Color>
 where
@@ -636,17 +694,19 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     u32: Into<Component::Sum>,
 {
-    if color_counts.num_colors() <= u32::from(k.into_inner()) {
-        QuantizeOutput::trivial_quantize(color_counts)
+    if let Some(output) = QuantizeOutput::trivial_indexed_palette(color_counts, palette_size) {
+        output
     } else {
-        Wu3::from_color_counts(color_counts, binner).indexed_palette(k)
+        Wu3::new(color_counts, binner).indexed_palette(palette_size)
     }
 }
 
+/// Computes a color palette in parallel from the given `color_counts`
+/// with at most `palette_size` entries and using the given `binner`.
 #[cfg(feature = "threads")]
 pub fn palette_par<Color, Component, const B: usize>(
     color_counts: &(impl ColorCounts<Color, Component, N> + Send + Sync),
-    k: PaletteSize,
+    palette_size: PaletteSize,
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> QuantizeOutput<Color>
 where
@@ -655,17 +715,20 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     u32: Into<Component::Sum>,
 {
-    if color_counts.num_colors() <= u32::from(k.into_inner()) {
-        QuantizeOutput::trivial_palette(color_counts)
+    if let Some(output) = QuantizeOutput::trivial_palette(color_counts, palette_size) {
+        output
     } else {
-        Wu3::from_color_counts_par(color_counts, binner).palette(k)
+        Wu3::new_par(color_counts, binner).palette(palette_size)
     }
 }
 
+/// Computes a color palette in parallel from the given `color_counts`
+/// with at most `palette_size` entries and using the given `binner`.
+/// The returned [`QuantizeOutput`] will have its `indices` populated.
 #[cfg(feature = "threads")]
 pub fn indexed_palette_par<Color, Component, const B: usize>(
-    color_counts: &(impl ColorCounts<Color, Component, N> + ParallelColorRemap + Send + Sync),
-    k: PaletteSize,
+    color_counts: &(impl ColorCountsParallelRemap<Color, Component, N> + Send + Sync),
+    palette_size: PaletteSize,
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> QuantizeOutput<Color>
 where
@@ -674,13 +737,16 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     u32: Into<Component::Sum>,
 {
-    if color_counts.num_colors() <= u32::from(k.into_inner()) {
-        QuantizeOutput::trivial_quantize_par(color_counts)
+    if let Some(output) = QuantizeOutput::trivial_indexed_palette(color_counts, palette_size) {
+        output
     } else {
-        Wu3::from_color_counts_par(color_counts, binner).quantize_par(k)
+        Wu3::new_par(color_counts, binner).indexed_palette_par(palette_size)
     }
 }
 
+/// A binner for colors with components that are unsigned integer types.
+///
+/// `B` is the number of bins to have in each dimension and must be a power of 2.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct UIntBinner<const B: usize>;
 
@@ -705,9 +771,14 @@ impl<const B: usize> Binner3<u16, B> for UIntBinner<B> {
     }
 }
 
+/// A binner for colors with components that are floating point types.
+///
+/// `B` is the number of bins to have in each dimension.
 #[derive(Debug, Clone, Copy)]
 pub struct FloatBinner<F: Float, const B: usize> {
+    /// The minimum values in each dimension.
     mins: [F; N],
+    /// The widths of the bins in each dimension.
     steps: [F; N],
 }
 
@@ -716,6 +787,9 @@ where
     F: Float + AsPrimitive<u8> + 'static,
     usize: AsPrimitive<F>,
 {
+    /// Creates a new [`FloatBinner`] from the given ranges of values for each component.
+    ///
+    /// Each range should be of the form `(min_value, max_value)`.
     pub fn new(ranges: [(F, F); N]) -> Self {
         Self {
             mins: ranges.map(|(low, _)| low),

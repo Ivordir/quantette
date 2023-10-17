@@ -1,3 +1,5 @@
+//! Contains the [`PalettePipeline`] builder struct for the high level API.
+
 #[cfg(feature = "kmeans")]
 use super::num_samples;
 
@@ -7,12 +9,12 @@ use crate::{
 };
 
 #[cfg(all(feature = "colorspaces", feature = "threads"))]
-use crate::colorspace::convert_color_space_par;
+use crate::colorspace::convert_color_slice_par;
 #[cfg(feature = "image")]
 use crate::AboveMaxLen;
 #[cfg(feature = "colorspaces")]
 use crate::{
-    colorspace::{convert_color_space, from_srgb, to_srgb},
+    colorspace::{convert_color_slice, from_srgb, to_srgb},
     Binner3, SumPromotion, ZeroedIsZero,
 };
 #[cfg(feature = "kmeans")]
@@ -30,16 +32,110 @@ use num_traits::AsPrimitive;
 #[cfg(feature = "colorspaces")]
 use palette::{Lab, Oklab};
 
+/// A builder struct to specify options to create a color palette for an image or slice of colors.
+///
+/// # Examples
+/// To start, create a [`PalettePipeline`] from an [`RgbImage`] (note that the `image` feature is needed):
+/// ```no_run
+/// # use quantette::PalettePipeline;
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let img = image::open("some image")?.into_rgb8();
+/// let pipeline = PalettePipeline::try_from(&img)?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// A slice of colors can be used instead:
+/// ```
+/// # use quantette::{PalettePipeline, AboveMaxLen};
+/// # use palette::Srgb;
+/// # fn main() -> Result<(), AboveMaxLen<u32>> {
+/// let srgb = vec![Srgb::new(0, 0, 0)];
+/// let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Then, you can change different options like the number of colors in the palette:
+/// ```
+/// # use quantette::{PalettePipeline, AboveMaxLen};
+/// # use palette::Srgb;
+/// # fn main() -> Result<(), AboveMaxLen<u32>> {
+/// # let srgb = vec![Srgb::new(0, 0, 0)];
+/// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// let pipeline = pipeline.palette_size(192.into());
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Or, use a more accurate color space (needs the `colorspaces` feature):
+/// ```
+/// # use quantette::{PalettePipeline, AboveMaxLen, ColorSpace};
+/// # use palette::Srgb;
+/// # fn main() -> Result<(), AboveMaxLen<u32>> {
+/// # let srgb = vec![Srgb::new(0, 0, 0)];
+/// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// let pipeline = pipeline
+///     .palette_size(192.into())
+///     .colorspace(ColorSpace::Oklab);
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Or, change to a more accurate quantization method (needs the `kmeans` feature):
+/// ```
+/// # use quantette::{PalettePipeline, AboveMaxLen, ColorSpace, QuantizeMethod, KmeansOptions};
+/// # use palette::Srgb;
+/// # fn main() -> Result<(), AboveMaxLen<u32>> {
+/// # let srgb = vec![Srgb::new(0, 0, 0)];
+/// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// let pipeline = pipeline
+///     .palette_size(192.into())
+///     .colorspace(ColorSpace::Oklab)
+///     .quantize_method(QuantizeMethod::Kmeans(KmeansOptions::new()));
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Finally, run the pipeline:
+/// ```no_run
+/// # use quantette::{PalettePipeline, AboveMaxLen};
+/// # use palette::Srgb;
+/// # fn main() -> Result<(), AboveMaxLen<u32>> {
+/// # let srgb = vec![Srgb::new(0, 0, 0)];
+/// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// let palette = pipeline.palette();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Or, in parallel across multiple threads (needs the `threads` feature):
+/// ```no_run
+/// # use quantette::{PalettePipeline, AboveMaxLen};
+/// # use palette::Srgb;
+/// # fn main() -> Result<(), AboveMaxLen<u32>> {
+/// # let srgb = vec![Srgb::new(0, 0, 0)];
+/// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// let palette = pipeline.palette_par();
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct PalettePipeline<'a> {
+    /// The input image/slice of colors.
     pub(crate) colors: ColorSlice<'a, Srgb<u8>>,
+    /// The number of colors to put in the palette.
     pub(crate) k: PaletteSize,
+    /// The color space to perform color quantization in.
     pub(crate) colorspace: ColorSpace,
+    /// The color quantization method to use.
     pub(crate) quantize_method: QuantizeMethod<Srgb<u8>>,
+    /// Whether or not to deduplicate the input pixels/colors.
     pub(crate) dedup_pixels: bool,
 }
 
 impl<'a> PalettePipeline<'a> {
+    /// Creates a new [`PalettePipeline`] with default options.
     #[must_use]
     pub fn new(colors: ColorSlice<'a, Srgb<u8>>) -> Self {
         Self {
@@ -51,12 +147,20 @@ impl<'a> PalettePipeline<'a> {
         }
     }
 
+    /// Sets the palette size which determines the (maximum) number of colors to have in the palette.
+    ///
+    /// The default palette size is [`PaletteSize::MAX`].
     #[must_use]
     pub fn palette_size(mut self, size: PaletteSize) -> Self {
         self.k = size;
         self
     }
 
+    /// Sets the color space to perform color quantization in.
+    ///
+    /// See [`ColorSpace`] for more details.
+    ///
+    /// The default color space is [`ColorSpace::Srgb`].
     #[must_use]
     #[cfg(feature = "colorspaces")]
     pub fn colorspace(mut self, colorspace: ColorSpace) -> Self {
@@ -64,17 +168,31 @@ impl<'a> PalettePipeline<'a> {
         self
     }
 
-    #[must_use]
-    #[cfg(any(feature = "colorspaces", feature = "kmeans"))]
-    pub fn dedup_pixels(mut self, dedup_pixels: bool) -> Self {
-        self.dedup_pixels = dedup_pixels;
-        self
-    }
-
+    /// Sets the color quantization method to use.
+    ///
+    /// See [`QuantizeMethod`] for more details.
+    ///
+    /// The default quantization method is [`QuantizeMethod::Wu`].
     #[must_use]
     #[cfg(feature = "kmeans")]
     pub fn quantize_method(mut self, quantize_method: QuantizeMethod<Srgb<u8>>) -> Self {
         self.quantize_method = quantize_method;
+        self
+    }
+
+    /// Sets whether or not to deduplicate pixels in the image.
+    ///
+    /// It is recommended to keep this option as default, unless the image is very small or
+    /// you have reason to believe that the image contains very little redundancy
+    /// (i.e., most pixels are their own unique color).
+    /// `quantette` will only deduplicate pixels if it is worth doing so
+    /// (i.e., the k-means quantization method is chosen or a color space converision is needed).
+    ///
+    /// The default value is `true`.
+    #[must_use]
+    #[cfg(any(feature = "colorspaces", feature = "kmeans"))]
+    pub fn dedup_pixels(mut self, dedup_pixels: bool) -> Self {
+        self.dedup_pixels = dedup_pixels;
         self
     }
 }
@@ -110,6 +228,7 @@ impl<'a> From<ImagePipeline<'a>> for PalettePipeline<'a> {
 }
 
 impl<'a> PalettePipeline<'a> {
+    /// Runs the pipeline and returns the computed color palette.
     #[must_use]
     pub fn palette(self) -> Vec<Srgb<u8>> {
         match self.colorspace {
@@ -141,44 +260,19 @@ impl<'a> PalettePipeline<'a> {
             #[cfg(feature = "colorspaces")]
             ColorSpace::Lab => self.palette_convert(
                 &ColorSpace::default_binner_lab_f32(),
-                from_srgb::<_, Lab>,
+                from_srgb::<Lab>,
                 to_srgb,
             ),
             #[cfg(feature = "colorspaces")]
             ColorSpace::Oklab => self.palette_convert(
                 &ColorSpace::default_binner_oklab_f32(),
-                from_srgb::<_, Oklab>,
+                from_srgb::<Oklab>,
                 to_srgb,
             ),
         }
     }
 
-    #[cfg(feature = "colorspaces")]
-    fn convert_quantize_method<Color>(
-        quantize_method: QuantizeMethod<Srgb<u8>>,
-        convert_to: impl Fn(Srgb<u8>) -> Color,
-    ) -> QuantizeMethod<Color> {
-        match quantize_method {
-            QuantizeMethod::Wu => QuantizeMethod::Wu,
-            #[cfg(feature = "kmeans")]
-            QuantizeMethod::Kmeans(KmeansOptions {
-                sampling_factor,
-                initial_centroids,
-                seed,
-                #[cfg(feature = "threads")]
-                batch_size,
-            }) => QuantizeMethod::Kmeans(KmeansOptions {
-                initial_centroids: initial_centroids.map(|c| {
-                    Centroids::from_truncated(c.into_inner().into_iter().map(&convert_to).collect())
-                }),
-                sampling_factor,
-                seed,
-                #[cfg(feature = "threads")]
-                batch_size,
-            }),
-        }
-    }
-
+    /// Computes a color palette, converting to a different color space to perform the quantization.
     #[cfg(feature = "colorspaces")]
     fn palette_convert<Color, Component, const B: usize>(
         self,
@@ -197,13 +291,13 @@ impl<'a> PalettePipeline<'a> {
             colors, k, quantize_method, dedup_pixels, ..
         } = self;
 
-        let quantize_method = Self::convert_quantize_method(quantize_method, &convert_to);
+        let quantize_method = quantize_method.convert_color_space_from_srgb(&convert_to);
 
         let palette = if dedup_pixels {
             let color_counts = UniqueColorCounts::new(colors, convert_to);
             palette(&color_counts, k, quantize_method, binner)
         } else {
-            let colors = convert_color_space(colors, convert_to);
+            let colors = convert_color_slice(colors, convert_to);
             let colors = ColorSlice::from_truncated(&colors);
             palette(&colors, k, quantize_method, binner)
         };
@@ -214,6 +308,7 @@ impl<'a> PalettePipeline<'a> {
 
 #[cfg(feature = "threads")]
 impl<'a> PalettePipeline<'a> {
+    /// Runs the pipeline in parallel and returns the computed color palette.
     #[must_use]
     pub fn palette_par(self) -> Vec<Srgb<u8>> {
         match self.colorspace {
@@ -245,18 +340,20 @@ impl<'a> PalettePipeline<'a> {
             #[cfg(feature = "colorspaces")]
             ColorSpace::Lab => self.palette_convert_par(
                 &ColorSpace::default_binner_lab_f32(),
-                from_srgb::<_, Lab>,
+                from_srgb::<Lab>,
                 to_srgb,
             ),
             #[cfg(feature = "colorspaces")]
             ColorSpace::Oklab => self.palette_convert_par(
                 &ColorSpace::default_binner_oklab_f32(),
-                from_srgb::<_, Oklab>,
+                from_srgb::<Oklab>,
                 to_srgb,
             ),
         }
     }
 
+    /// Computes a color palette in parallel, converting to a different color space
+    /// to perform the quantization.
     #[cfg(feature = "colorspaces")]
     fn palette_convert_par<Color, Component, const B: usize>(
         self,
@@ -275,14 +372,14 @@ impl<'a> PalettePipeline<'a> {
             colors, k, quantize_method, dedup_pixels, ..
         } = self;
 
-        let quantize_method = Self::convert_quantize_method(quantize_method, &convert_to);
+        let quantize_method = quantize_method.convert_color_space_from_srgb(&convert_to);
 
         let palette = if dedup_pixels {
             let color_counts = UniqueColorCounts::new_par(colors, convert_to);
 
             palette_par(&color_counts, k, quantize_method, binner)
         } else {
-            let colors = convert_color_space_par(colors, convert_to);
+            let colors = convert_color_slice_par(colors, convert_to);
             let colors = ColorSlice::from_truncated(&colors);
             palette_par(&colors, k, quantize_method, binner)
         };
@@ -291,6 +388,7 @@ impl<'a> PalettePipeline<'a> {
     }
 }
 
+/// Computes a color palette.
 fn palette<Color, Component, const B: usize>(
     color_counts: &impl ColorCounts<Color, Component, 3>,
     k: PaletteSize,
@@ -321,6 +419,7 @@ where
     }
 }
 
+/// Computes a color palette in parallel.
 #[cfg(feature = "threads")]
 fn palette_par<Color, Component, const B: usize>(
     color_counts: &(impl ColorCounts<Color, Component, 3> + Send + Sync),

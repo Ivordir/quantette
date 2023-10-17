@@ -10,10 +10,7 @@ use criterion::{
     SamplingMode,
 };
 use palette::{IntoColor, Oklab};
-use quantette::{
-    dither::{Ditherer, FloydSteinberg},
-    wu, ColorSlice, ColorSpace, IndexedColorCounts, PaletteSize,
-};
+use quantette::{wu, ColorSlice, ColorSpace, FloydSteinberg, IndexedColorCounts, PaletteSize};
 
 fn bench<ColorCount>(
     c: &mut Criterion,
@@ -92,13 +89,7 @@ fn dither_srgb_single(c: &mut Criterion) {
 
         b.iter(|| {
             let mut indices = result.indices.clone();
-            FloydSteinberg::new().dither(
-                &result.palette,
-                &mut indices,
-                colors.as_slice(),
-                width,
-                height,
-            )
+            FloydSteinberg::new().dither(&result.palette, &mut indices, &colors, width, height)
         })
     })
 }

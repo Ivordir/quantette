@@ -21,8 +21,8 @@ use clap::{Parser, ValueEnum};
 use image::{buffer::ConvertBuffer, RgbImage, RgbaImage};
 use palette::{IntoColor, Lab, LinSrgb, Oklab, Srgb};
 use quantette::{
-    dither::{Ditherer, FloydSteinberg},
-    kmeans, wu, ColorComponents, ColorCounts, ColorSpace, IndexedColorCounts, PaletteSize,
+    kmeans, wu, ColorComponents, ColorCounts, ColorSpace, FloydSteinberg, IndexedColorCounts,
+    PaletteSize,
 };
 use rayon::prelude::*;
 use rgb::{FromSlice, RGB8, RGBA};
@@ -118,8 +118,8 @@ struct Options {
     #[arg(long)]
     dither: bool,
 
-    #[arg(long)]
-    dither_strength: Option<f32>,
+    #[arg(long, default_value_t = FloydSteinberg::DEFAULT_ERROR_DIFFUSION)]
+    dither_error_diffusion: f32,
 
     images: Vec<PathBuf>,
 }
@@ -226,12 +226,7 @@ fn main() {
             move |k| {
                 let (colors, mut indices) = f(&color_counts, k);
                 if options.dither {
-                    FloydSteinberg(
-                        options
-                            .dither_strength
-                            .unwrap_or(FloydSteinberg::DEFAULT_STRENGTH),
-                    )
-                    .dither_indexed(
+                    FloydSteinberg(options.dither_error_diffusion).dither_indexed(
                         &colors,
                         &mut indices,
                         color_counts.colors(),
@@ -540,7 +535,7 @@ fn main() {
         }
         (algo, _) => {
             panic!(
-                "{algo} does not support the {} colorspace",
+                "{algo} does not support the {} color space",
                 options.colorspace
             )
         }

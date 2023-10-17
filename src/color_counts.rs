@@ -1,3 +1,5 @@
+//! Contains the code for color/pixel deduplication and associated traits and types.
+
 use crate::{AboveMaxLen, ColorComponents, ColorSlice, ZeroedIsZero};
 
 use std::{marker::PhantomData, ops::Range};
@@ -12,28 +14,59 @@ use palette::Srgb;
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
 
+/// A generalization trait over regular [`ColorSlice`]s and deduplicated pixels like [`UniqueColorCounts`].
 pub trait ColorCounts<Color, Component, const N: usize>
 where
     Color: ColorComponents<Component, N>,
 {
+    /// The slice of colors to quantize.
+    ///
+    /// The colors need not be unique,
+    /// but the length of this slice must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
     fn colors(&self) -> &[Color];
 
+    /// The total number of pixels/colors in the (original) color slice.
+    ///
+    /// For [`ColorSlice`]s, this is simply the length of the slice.
+    /// For deduplicated pixels like [`UniqueColorCounts`],
+    /// this is the length of the input [`ColorSlice`] before deduplication.
+    /// This must be equal to the sum of `counts` (or `num_colors` if `counts` is `None`).
+    fn total_count(&self) -> u32;
+
+    /// The number of pixels corresponding to each `Color` in the slice returned by `colors`.
+    ///
+    /// For [`ColorSlice`]s, this returns `None`, indicating each `Color` has a count of `1`.
+    /// For deduplicated pixels like [`UniqueColorCounts`],
+    /// each count indicates the number times each unique color was present in the original color slice.
+    ///
+    /// The length of the returned slice (if any) must have the same length as the slice returned by `colors`.
+    /// As such, the length of this slice must also not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
+    fn counts(&self) -> Option<&[u32]>;
+
+    /// A slice of indices into the color slice returned by `colors`.
+    /// This is used to retain the original color slice/image after deduplication.
+    ///
+    /// The length of this slice must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS),
+    /// and each index must be valid index into the slice returned by `colors`.
+    fn indices(&self) -> Option<&[u32]>;
+
+    /// The slice returned by `colors` casted to a slice of component arrays.
     fn color_components(&self) -> &[[Component; N]] {
         self.colors().as_arrays()
     }
 
-    fn num_colors(&self) -> u32;
-
-    fn counts(&self) -> Option<&[u32]>;
-
-    fn total_count(&self) -> u32;
-
-    fn indices(&self) -> Option<&[u32]>;
-
-    fn len(&self) -> usize {
-        self.num_colors() as usize
+    /// The length of the slice returned by `colors` as a `u32`.
+    #[allow(clippy::cast_possible_truncation)]
+    fn num_colors(&self) -> u32 {
+        self.len() as u32
     }
 
+    /// The length of the slice returned by `colors`.
+    fn len(&self) -> usize {
+        self.colors().len()
+    }
+
+    /// Whether or not the slice returned by `colors` is empty.
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -45,10 +78,18 @@ where
     Color: ColorComponents<Component, N>,
 {
     fn colors(&self) -> &[Color] {
-        self.as_slice()
+        self
+    }
+
+    fn total_count(&self) -> u32 {
+        self.num_colors()
     }
 
     fn counts(&self) -> Option<&[u32]> {
+        None
+    }
+
+    fn indices(&self) -> Option<&[u32]> {
         None
     }
 
@@ -56,20 +97,12 @@ where
         self.num_colors()
     }
 
-    fn total_count(&self) -> u32 {
-        self.num_colors()
-    }
-
-    fn indices(&self) -> Option<&[u32]> {
-        None
-    }
-
     fn len(&self) -> usize {
-        self.len()
+        self.as_ref().len()
     }
 
     fn is_empty(&self) -> bool {
-        self.is_empty()
+        self.as_ref().is_empty()
     }
 }
 
@@ -86,16 +119,12 @@ where
         Some(&self.counts)
     }
 
-    fn num_colors(&self) -> u32 {
-        self.num_colors()
+    fn indices(&self) -> Option<&[u32]> {
+        None
     }
 
     fn total_count(&self) -> u32 {
         self.total_count
-    }
-
-    fn indices(&self) -> Option<&[u32]> {
-        None
     }
 }
 
@@ -112,30 +141,43 @@ where
         Some(&self.counts)
     }
 
-    fn num_colors(&self) -> u32 {
-        self.num_colors()
+    fn indices(&self) -> Option<&[u32]> {
+        Some(&self.indices)
     }
 
     fn total_count(&self) -> u32 {
         self.total_count
     }
-
-    fn indices(&self) -> Option<&[u32]> {
-        Some(&self.indices)
-    }
 }
 
-pub trait ColorRemap {
+/// Types that allow reconstructing the original image/color slice from a `Vec` of indices
+/// into a color palette.
+pub trait ColorCountsRemap<Color, Component, const N: usize>:
+    ColorCounts<Color, Component, N>
+where
+    Color: ColorComponents<Component, N>,
+{
+    /// Uses the given `Vec` of indices to create indices for each pixel/color
+    /// in the original image/color slice.
+    ///
+    /// The given `Vec` will have the same length as the color slice returned by `colors`.
+    ///
+    /// The length of the returned `Vec` must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
     fn map_indices(&self, indices: Vec<u8>) -> Vec<u8>;
 }
 
-impl<'a, Color> ColorRemap for ColorSlice<'a, Color> {
+impl<'a, Color, Component, const N: usize> ColorCountsRemap<Color, Component, N>
+    for ColorSlice<'a, Color>
+where
+    Color: ColorComponents<Component, N>,
+{
     fn map_indices(&self, indices: Vec<u8>) -> Vec<u8> {
         indices
     }
 }
 
-impl<Color, Component, const N: usize> ColorRemap for IndexedColorCounts<Color, Component, N>
+impl<Color, Component, const N: usize> ColorCountsRemap<Color, Component, N>
+    for IndexedColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N>,
 {
@@ -145,20 +187,36 @@ where
     }
 }
 
+/// Types that allow reconstructing the original image/color slice in parallel
+/// from a `Vec` of indices into a color palette.
 #[cfg(feature = "threads")]
-pub trait ParallelColorRemap {
+pub trait ColorCountsParallelRemap<Color, Component, const N: usize>:
+    ColorCounts<Color, Component, N>
+where
+    Color: ColorComponents<Component, N>,
+{
+    /// Uses the given `Vec` of indices to create indices, in parallel, for each pixel/color
+    /// in the original image/color slice.
+    ///
+    /// The given `Vec` will have the same length as the color slice returned by `colors`.
+    ///
+    /// The length of the returned `Vec` must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
     fn map_indices_par(&self, indices: Vec<u8>) -> Vec<u8>;
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color> ParallelColorRemap for ColorSlice<'a, Color> {
+impl<'a, Color, Component, const N: usize> ColorCountsParallelRemap<Color, Component, N>
+    for ColorSlice<'a, Color>
+where
+    Color: ColorComponents<Component, N>,
+{
     fn map_indices_par(&self, indices: Vec<u8>) -> Vec<u8> {
         indices
     }
 }
 
 #[cfg(feature = "threads")]
-impl<Color, Component, const N: usize> ParallelColorRemap
+impl<Color, Component, const N: usize> ColorCountsParallelRemap<Color, Component, N>
     for IndexedColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N>,
@@ -175,11 +233,13 @@ where
 /// A byte-sized Radix
 const RADIX: usize = u8::MAX as usize + 1;
 
+/// Returns the range associated with the `i`-th chunk.
 #[inline]
 fn chunk_range(chunks: &[u32], i: usize) -> Range<usize> {
     (chunks[i] as usize)..(chunks[i + 1] as usize)
 }
 
+/// Count the first byte component in the given color slice.
 fn u8_counts<Color, const CHUNKS: usize>(pixels: &[Color], counts: &mut [[u32; RADIX + 1]; CHUNKS])
 where
     Color: ColorComponents<u8, 3>,
@@ -203,6 +263,7 @@ where
     }
 }
 
+/// Computes the prefix sum of the array in place.
 #[inline]
 fn prefix_sum<const M: usize>(counts: &mut [u32; M]) {
     for i in 1..M {
@@ -210,14 +271,21 @@ fn prefix_sum<const M: usize>(counts: &mut [u32; M]) {
     }
 }
 
+/// Deduplicated colors and their frequency counts.
+///
+/// Currently, only colors that implement [`ColorComponents<u8, 3>`] are supported.
 #[derive(Debug, Clone)]
 pub struct UniqueColorCounts<Color, Component, const N: usize>
 where
     Color: ColorComponents<Component, N>,
 {
+    /// The component type must remain the same for each [`UniqueColorCounts`].
     _phantom: PhantomData<Component>,
+    /// The unique colors.
     colors: Vec<Color>,
+    /// The number of times each color was present in the original color slice/image.
     counts: Vec<u32>,
+    /// The total number of pixels/colors in the original color slice/image.
     total_count: u32,
 }
 
@@ -239,27 +307,37 @@ impl<Color, Component, const N: usize> UniqueColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N>,
 {
+    /// Returns the slice of unique colors.
+    #[must_use]
+    pub fn colors(&self) -> &[Color] {
+        &self.colors
+    }
+
+    /// Returns a slice for the number of times each unique color was present in the original color slice/image.
+    #[must_use]
+    pub fn counts(&self) -> &[u32] {
+        &self.counts
+    }
+
+    /// Returns the number of original pixels/colors.
+    ///
+    /// This is equal to the sum of [`UniqueColorCounts::counts`].
     #[must_use]
     pub fn total_count(&self) -> u32 {
         self.total_count
     }
 
+    /// Returns the number of unique colors.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn num_colors(&self) -> u32 {
         self.colors.len() as u32
     }
 
-    #[must_use]
-    pub fn colors(&self) -> &[Color] {
-        &self.colors
-    }
-
-    #[must_use]
-    pub fn counts(&self) -> &[u32] {
-        &self.counts
-    }
-
+    /// Creates a new [`UniqueColorCounts`] from a [`ColorSlice`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|color| color`) to skip color space conversion.
     pub fn new<InputColor>(
         pixels: ColorSlice<InputColor>,
         convert_color: impl Fn(InputColor) -> Color,
@@ -271,7 +349,6 @@ where
             Self::default()
         } else {
             let total_count = pixels.num_colors();
-            let pixels = pixels.as_slice();
 
             let mut colors = Vec::new();
             let mut counts = Vec::new();
@@ -281,7 +358,7 @@ where
             let mut bitmask: BitVec = BitVec::repeat(false, RADIX * RADIX);
 
             let mut red_prefix = ZeroedIsZero::box_zeroed();
-            u8_counts::<_, 4>(pixels, &mut red_prefix);
+            u8_counts::<_, 4>(&pixels, &mut red_prefix);
             let red_prefix = &mut red_prefix[0];
             prefix_sum(red_prefix);
 
@@ -346,6 +423,13 @@ where
         }
     }
 
+    /// Tries to create a new [`UniqueColorCounts`] from an [`RgbImage`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.
+    ///
+    /// # Errors
+    /// Return an error if the number of pixels in the image are above [`MAX_PIXELS`](crate::MAX_PIXELS).
     #[cfg(feature = "image")]
     pub fn try_from_rgbimage(
         image: &RgbImage,
@@ -357,15 +441,26 @@ where
     }
 }
 
+/// Deduplicated colors and their frequency counts.
+///
+/// Unlike [`UniqueColorCounts`], this struct also holds indices for the original colors
+/// to be able to reconstruct a quantized image.
+///
+/// Currently, only colors that implement [`ColorComponents<u8, 3>`] are supported.
 #[derive(Debug, Clone)]
 pub struct IndexedColorCounts<Color, Component, const N: usize>
 where
     Color: ColorComponents<Component, N>,
 {
+    /// The component type must remain the same for each [`IndexedColorCounts`].
     _phantom: PhantomData<Component>,
+    /// The unique colors.
     colors: Vec<Color>,
+    /// The number of times each color was present in the original color slice/image.
     counts: Vec<u32>,
+    /// The total number of pixels/colors in the original color slice/image.
     total_count: u32,
+    /// The indices into `colors` for each of the original pixels/colors.
     indices: Vec<u32>,
 }
 
@@ -388,32 +483,43 @@ impl<Color, Component, const N: usize> IndexedColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N>,
 {
+    /// Returns the slice of unique colors.
+    #[must_use]
+    pub fn colors(&self) -> &[Color] {
+        &self.colors
+    }
+
+    /// Returns a slice for the number of times each unique color was present in the original color slice/image.
+    #[must_use]
+    pub fn counts(&self) -> &[u32] {
+        &self.counts
+    }
+
+    /// Returns the number of original pixels/colors.
+    ///
+    /// This is equal to the sum of [`IndexedColorCounts::counts`].
     #[must_use]
     pub fn total_count(&self) -> u32 {
         self.total_count
     }
 
+    /// Returns the number of unique colors.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn num_colors(&self) -> u32 {
         self.colors.len() as u32
     }
 
-    #[must_use]
-    pub fn colors(&self) -> &[Color] {
-        &self.colors
-    }
-
-    #[must_use]
-    pub fn counts(&self) -> &[u32] {
-        &self.counts
-    }
-
+    /// Returns the indices into [`IndexedColorCounts::colors`] for each of the original pixels/colors.
     #[must_use]
     pub fn indices(&self) -> &[u32] {
         &self.indices
     }
 
+    /// Creates a new [`IndexedColorCounts`] from a [`ColorSlice`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|color| color`) to skip color space conversion.
     pub fn new<InputColor>(
         pixels: ColorSlice<InputColor>,
         convert_color: impl Fn(InputColor) -> Color,
@@ -425,7 +531,6 @@ where
             Self::default()
         } else {
             let total_count = pixels.num_colors();
-            let pixels = pixels.as_slice();
 
             let mut colors = Vec::new();
             let mut counts = Vec::new();
@@ -438,7 +543,7 @@ where
             let mut bitmask: BitVec = BitVec::repeat(false, RADIX * RADIX);
 
             let mut red_prefix = ZeroedIsZero::box_zeroed();
-            u8_counts::<_, 4>(pixels, &mut red_prefix);
+            u8_counts::<_, 4>(&pixels, &mut red_prefix);
             let red_prefix = &mut red_prefix[0];
             prefix_sum(red_prefix);
 
@@ -523,6 +628,13 @@ where
         }
     }
 
+    /// Tries to create a new [`IndexedColorCounts`] from an [`RgbImage`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.
+    ///
+    /// # Errors
+    /// Return an error if the number of pixels in the image are above [`MAX_PIXELS`](crate::MAX_PIXELS).
     #[cfg(feature = "image")]
     pub fn try_from_rgbimage(
         image: &RgbImage,
@@ -534,29 +646,30 @@ where
     }
 }
 
-/// Unsafe utilities for sharing data across multiple threads
+/// Unsafe utilities for sharing data across multiple threads.
 #[cfg(feature = "threads")]
 #[allow(unsafe_code)]
 mod sync_unsafe {
     use std::{cell::UnsafeCell, ops::Range};
 
-    /// Unsafely share a mutable slice across multiple threads
+    /// Unsafely share a mutable slice across multiple threads.
     pub struct SyncUnsafeSlice<'a, T>(UnsafeCell<&'a mut [T]>);
 
     unsafe impl<'a, T: Send + Sync> Send for SyncUnsafeSlice<'a, T> {}
     unsafe impl<'a, T: Send + Sync> Sync for SyncUnsafeSlice<'a, T> {}
 
     impl<'a, T> SyncUnsafeSlice<'a, T> {
-        /// Create a new [`SyncUnsafeSlice`] with the given slice
+        /// Creates a new [`SyncUnsafeSlice`] with the given slice.
         pub fn new(slice: &'a mut [T]) -> Self {
             Self(UnsafeCell::new(slice))
         }
 
+        /// Unsafely get the inner mutable reference.
         unsafe fn get(&self) -> &'a mut [T] {
             unsafe { *self.0.get() }
         }
 
-        /// Unsafely write the given value to the given index in the slice
+        /// Unsafely write the given value to the given index in the slice.
         ///
         /// # Safety
         /// It is undefined behaviour if two threads write to the same index without synchronization.
@@ -567,7 +680,7 @@ mod sync_unsafe {
     }
 
     impl<'a, T: Copy> SyncUnsafeSlice<'a, T> {
-        /// Unsafely write the given slice to the given range
+        /// Unsafely write the given slice to the given range.
         ///
         /// # Safety
         /// It is undefined behaviour if two threads write to the same range/indices without synchronization.
@@ -586,6 +699,10 @@ impl<Color, Component, const N: usize> UniqueColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N> + Send,
 {
+    /// Creates a new [`UniqueColorCounts`] in parallel from a [`ColorSlice`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|color| color`) to skip color space conversion.
     #[allow(clippy::too_many_lines)]
     pub fn new_par<InputColor>(
         pixels: ColorSlice<InputColor>,
@@ -598,7 +715,6 @@ where
             Self::default()
         } else {
             let total_count = pixels.num_colors();
-            let pixels = pixels.as_slice();
 
             let chunk_size = pixels.len().div_ceil(rayon::current_num_threads());
             let red_prefixes = {
@@ -640,6 +756,7 @@ where
                     .par_chunks(chunk_size)
                     .zip(red_prefixes)
                     .for_each(|(chunk, mut red_prefix)| {
+                        /// Buffer length
                         const BUF_LEN: u8 = 128;
 
                         let mut buffer = <[[[u8; 2]; BUF_LEN as usize]; RADIX]>::box_zeroed();
@@ -737,6 +854,13 @@ where
         }
     }
 
+    /// Tries to create a new [`UniqueColorCounts`] in parallel from an [`RgbImage`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.
+    ///
+    /// # Errors
+    /// Return an error if the number of pixels in the image are above [`MAX_PIXELS`](crate::MAX_PIXELS).
     #[cfg(feature = "image")]
     pub fn try_from_rgbimage_par(
         image: &RgbImage,
@@ -753,6 +877,10 @@ impl<Color, Component, const N: usize> IndexedColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N> + Send,
 {
+    /// Creates a new [`IndexedColorCounts`] in parallel from a [`ColorSlice`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|color| color`) to skip color space conversion.
     #[allow(clippy::too_many_lines)]
     pub fn new_par<InputColor>(
         pixels: ColorSlice<InputColor>,
@@ -765,7 +893,6 @@ where
             Self::default()
         } else {
             let total_count = pixels.num_colors();
-            let pixels = pixels.as_slice();
 
             let chunk_size = pixels.len().div_ceil(rayon::current_num_threads());
             let red_prefixes = {
@@ -935,6 +1062,13 @@ where
         }
     }
 
+    /// Tries to create a new [`IndexedColorCounts`] in parallel from an [`RgbImage`].
+    ///
+    /// The `convert_color` function can be used to convert the color space of the resulting colors.
+    /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.
+    ///
+    /// # Errors
+    /// Return an error if the number of pixels in the image are above [`MAX_PIXELS`](crate::MAX_PIXELS).
     #[cfg(feature = "image")]
     pub fn try_from_rgbimage_par(
         image: &RgbImage,

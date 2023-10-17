@@ -1,3 +1,5 @@
+//! Contains dither implementation(s).
+
 use crate::ColorComponents;
 
 use std::array;
@@ -6,35 +8,18 @@ use ordered_float::OrderedFloat;
 use palette::cast::AsArrays;
 use wide::{f32x8, u32x8, CmpLe};
 
-pub trait Ditherer<T> {
-    fn dither_indexed<Color, const N: usize>(
-        &self,
-        palette: &[Color],
-        indices: &mut [u8],
-        original_palette: &[Color],
-        original_indices: &[u32],
-        width: u32,
-        height: u32,
-    ) where
-        Color: ColorComponents<T, N>;
-
-    fn dither<Color, const N: usize>(
-        &self,
-        palette: &[Color],
-        indices: &mut [u8],
-        original_colors: &[Color],
-        width: u32,
-        height: u32,
-    ) where
-        Color: ColorComponents<T, N>;
-}
-
+/// Floyd–Steinberg dithering.
+///
+/// The inner `f32` value denotes the error diffusion factor.
+/// E.g, a factor of `1.0` diffuses all of the error to the neighboring pixels.
 #[derive(Debug, Clone, Copy)]
 pub struct FloydSteinberg(pub f32);
 
 impl FloydSteinberg {
-    pub const DEFAULT_STRENGTH: f32 = 7.0 / 8.0;
+    /// The default error diffusion factor.
+    pub const DEFAULT_ERROR_DIFFUSION: f32 = 7.0 / 8.0;
 
+    /// Creates a new [`FloydSteinberg`] with the default error diffusion factor.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -43,11 +28,13 @@ impl FloydSteinberg {
 
 impl Default for FloydSteinberg {
     fn default() -> Self {
-        Self(Self::DEFAULT_STRENGTH)
+        Self(Self::DEFAULT_ERROR_DIFFUSION)
     }
 }
 
+/// Constructs a nearest neighbor distance table for the given palette.
 fn distance_table<const N: usize>(palette: &[[f32; N]]) -> (Vec<f32>, Vec<(u32x8, [f32x8; N])>) {
+    /// Squared euclidean distance between two points.
     fn squared_euclidean_distance<const N: usize>(x: [f32; N], y: [f32; N]) -> f32 {
         let mut dist = 0.0;
         for c in 0..N {
@@ -106,6 +93,8 @@ fn distance_table<const N: usize>(palette: &[[f32; N]]) -> (Vec<f32>, Vec<(u32x8
     (distances, components)
 }
 
+/// Given a point and a guess for its nearest palette index,
+/// this returns the nearest palette entry and its index.
 #[allow(clippy::inline_always)]
 #[inline(always)]
 fn nearest_neighbor<const N: usize>(
@@ -169,6 +158,7 @@ fn nearest_neighbor<const N: usize>(
     (min_index, palette[usize::from(min_index)])
 }
 
+/// Multiplies `other` by a scalar, `alpha`, and adds the result to `arr`.
 #[inline]
 fn arr_mul_add_assign<const N: usize>(arr: &mut [f32; N], alpha: f32, other: &[f32; N]) {
     for i in 0..N {
@@ -176,23 +166,25 @@ fn arr_mul_add_assign<const N: usize>(arr: &mut [f32; N], alpha: f32, other: &[f
     }
 }
 
-impl<T> Ditherer<T> for FloydSteinberg
-where
-    T: Copy + Into<f32>,
-{
-    fn dither_indexed<Color, const N: usize>(
+impl FloydSteinberg {
+    /// Performs dithering on the given indices.
+    ///
+    /// The original input/image is taken in the form of an indexed palette.
+    pub fn dither_indexed<Color, Component, const N: usize>(
         &self,
         palette: &[Color],
         indices: &mut [u8],
         original_colors: &[Color],
         original_indices: &[u32],
         width: u32,
-        _height: u32,
+        height: u32,
     ) where
-        Color: ColorComponents<T, N>,
+        Color: ColorComponents<Component, N>,
+        Component: Copy + Into<f32>,
     {
-        let FloydSteinberg(strength) = *self;
+        let FloydSteinberg(diffusion) = *self;
         let width = width as usize;
+        let _ = height; // not needed for now
 
         let palette = palette
             .as_arrays()
@@ -227,25 +219,25 @@ where
                 let (j, nearest) = nearest_neighbor(*i, point, &palette, &distances, &components);
 
                 *i = j;
-                let err = array::from_fn(|i| point[i] - nearest[i]);
+                let err = array::from_fn(|i| diffusion * (point[i] - nearest[i]));
 
                 if row % 2 == 0 {
-                    arr_mul_add_assign(&mut error1[x + 2], strength * (7.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x], strength * (3.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
+                    arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
 
                     let e = &mut error2[x + 2];
                     for i in 0..N {
-                        e[i] = strength * (1.0 / 16.0) * err[i];
+                        e[i] = (1.0 / 16.0) * err[i];
                     }
                 } else {
-                    arr_mul_add_assign(&mut error1[x], strength * (7.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x + 2], strength * (3.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
+                    arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
 
                     let e = &mut error2[x];
                     for i in 0..N {
-                        e[i] = strength * (1.0 / 16.0) * err[i];
+                        e[i] = (1.0 / 16.0) * err[i];
                     }
                 }
             }
@@ -256,18 +248,21 @@ where
         }
     }
 
-    fn dither<Color, const N: usize>(
+    /// Performs dithering on the given indices.
+    pub fn dither<Color, Component, const N: usize>(
         &self,
         palette: &[Color],
         indices: &mut [u8],
         original_colors: &[Color],
         width: u32,
-        _height: u32,
+        height: u32,
     ) where
-        Color: ColorComponents<T, N>,
+        Color: ColorComponents<Component, N>,
+        Component: Copy + Into<f32>,
     {
-        let FloydSteinberg(strength) = *self;
+        let FloydSteinberg(diffusion) = *self;
         let width = width as usize;
+        let _ = height; // not needed for now
 
         let palette = palette
             .as_arrays()
@@ -295,25 +290,25 @@ where
                 let (j, nearest) = nearest_neighbor(*i, point, &palette, &distances, &components);
 
                 *i = j;
-                let err = array::from_fn(|i| point[i] - nearest[i]);
+                let err = array::from_fn(|i| diffusion * (point[i] - nearest[i]));
 
                 if row % 2 == 0 {
-                    arr_mul_add_assign(&mut error1[x + 2], strength * (7.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x], strength * (3.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
+                    arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
 
                     let e = &mut error2[x + 2];
                     for i in 0..N {
-                        e[i] = strength * (1.0 / 16.0) * err[i];
+                        e[i] = (1.0 / 16.0) * err[i];
                     }
                 } else {
-                    arr_mul_add_assign(&mut error1[x], strength * (7.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x + 2], strength * (3.0 / 16.0), &err);
-                    arr_mul_add_assign(&mut error2[x + 1], strength * (5.0 / 16.0), &err);
+                    arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
+                    arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
 
                     let e = &mut error2[x];
                     for i in 0..N {
-                        e[i] = strength * (1.0 / 16.0) * err[i];
+                        e[i] = (1.0 / 16.0) * err[i];
                     }
                 }
             }
