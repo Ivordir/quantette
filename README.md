@@ -1,10 +1,23 @@
 # Quantette
 
+`quantette` is a library for fast and high quality image quantization and palette generation.
+It supports the sRGB color space for fast color quantization but also the CIELAB and Oklab
+color spaces for more accurate quantization. Similarly, `quantette`'s k-means color quantizer
+gives high quality results while the included Wu color quantizer gives fast but still quite good results.
+
+In some critical locations, `quantette` makes use of SIMD
+(via the [`wide`](https://crates.io/crates/wide) crate).
+Consider enabling the `avx` or `avx2`
+[target features](https://doc.rust-lang.org/reference/conditional-compilation.html#target_feature)
+for a noticeable speed up if your target architecture supports these features.
+If the `threads` cargo feature is enabled, multi-threaded versions of most functions
+become available for even greater speedup.
+
 # Examples
 
 Below are some examples of `quantette` in action.
 The dissimilarity between the each image and the original is reported in the tables below
-using [`dssim`](https://crates.io/crates/dssim).
+using [`dssim`](https://crates.io/crates/dssim) (lower numbers are better).
 Each table starts with output from GIMP as a comparison.
 
 Each output image was created like so:
@@ -14,9 +27,9 @@ Each output image was created like so:
 - The `K-means - Oklab` output was creating using `quantette`'s most accurate quantization method.
   A sampling factor of `0.5` and a batch size of `4096` was used.
 
-All outputs are undithered.
+All output images are undithered to better highlight differences.
 
-The original image:
+## Original Image
 
 ![Calaveras](img/CQ100/img/calaveras.png)
 

@@ -4,7 +4,7 @@
 //! for more accurate results.
 //!
 //! # Features
-//! To reduce dependencies and compile times, `quanette` has several `cargo` features
+//! To reduce dependencies and compile times, `quantette` has several `cargo` features
 //! that can be turned off or on:
 //! - `pipelines`: exposes builder structs that serve as the high-level API (more details below).
 //! - `colorspaces`: allows performing quantization in the CIELAB or Oklab color spaces via the high-level API.
