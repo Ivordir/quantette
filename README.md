@@ -1,5 +1,49 @@
 # Quantette
 
+# Examples
+
+Below are some examples of `quantette` in action.
+The dissimilarity between the each image and the original is reported in the tables below
+using [`dssim`](https://crates.io/crates/dssim).
+Each table starts with output from GIMP as a comparison.
+
+Each output image was created like so:
+- The GIMP output was creating using `Image > Mode > Indexed` with GIMP version `2.10.34`.
+- The `Wu - sRGB` output was creating using `quantette`'s fastest quantization method.
+  The default number of bins was used (`32`).
+- The `K-means - Oklab` output was creating using `quantette`'s most accurate quantization method.
+  A sampling factor of `0.5` and a batch size of `4096` was used.
+
+All outputs are undithered.
+
+The original image:
+
+![Calaveras](img/CQ100/img/calaveras.png)
+
+## 16 Colors
+
+| Method          | DSSIM      | Result                        |
+| --------------- | ---------- | ----------------------------- |
+| Gimp            | 0.06368717 | ![](docs/gimp_16.png)         |
+| Wu - sRGB       | 0.04014392 | ![](docs/wu_srgb_16.png)      |
+| K-means - Oklab | 0.02632949 | ![](docs/kmeans_oklab_16.png) |
+
+## 64 Colors
+
+| Method          | DSSIM      | Result                        |
+| --------------- | ---------- | ----------------------------- |
+| Gimp            | 0.01730340 | ![](docs/gimp_64.png)         |
+| Wu - sRGB       | 0.01256557 | ![](docs/wu_srgb_64.png)      |
+| K-means - Oklab | 0.00638550 | ![](docs/kmeans_oklab_64.png) |
+
+## 256 Colors
+
+| Method          | DSSIM      | Result                         |
+| --------------- | ---------- | ------------------------------ |
+| Gimp            | 0.00488789 | ![](docs/gimp_256.png)         |
+| Wu - sRGB       | 0.00330477 | ![](docs/wu_srgb_256.png)      |
+| K-means - Oklab | 0.00160596 | ![](docs/kmeans_oklab_256.png) |
+
 # License
 
 Quantette is licensed under either
