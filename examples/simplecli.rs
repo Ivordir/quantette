@@ -111,7 +111,8 @@ pub struct Options {
 
     input: PathBuf,
 
-    output: PathBuf,
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 
     #[command(subcommand)]
     quantizer: Quantizer,
@@ -140,7 +141,7 @@ fn main() {
 
     let image = log!("read image", image::open(input).unwrap());
 
-    let image = match quantizer {
+    match quantizer {
         Quantizer::Quantette {
             colorspace,
             dither,
@@ -173,21 +174,41 @@ fn main() {
                 .dither_error_diffusion(dither_error_diffusion)
                 .palette_size(k);
 
-            log!(
-                "quantization and remapping",
-                match threads {
-                    0 => pipeline.quantized_rgbimage_par(),
-                    1 => pipeline.quantized_rgbimage(),
-                    t => {
-                        let pool = rayon::ThreadPoolBuilder::new()
-                            .num_threads(t.into())
-                            .build()
-                            .unwrap();
+            if let Some(output) = output {
+                let image = log!(
+                    "quantization and remapping",
+                    match threads {
+                        0 => pipeline.quantized_rgbimage_par(),
+                        1 => pipeline.quantized_rgbimage(),
+                        t => {
+                            let pool = rayon::ThreadPoolBuilder::new()
+                                .num_threads(t.into())
+                                .build()
+                                .unwrap();
 
-                        pool.install(|| pipeline.quantized_rgbimage_par())
+                            pool.install(|| pipeline.quantized_rgbimage_par())
+                        }
                     }
-                }
-            )
+                );
+                log!("write image", image.save(output).unwrap())
+            } else {
+                let colors = log!(
+                    "quantization",
+                    match threads {
+                        0 => pipeline.palette_par(),
+                        1 => pipeline.palette(),
+                        t => {
+                            let pool = rayon::ThreadPoolBuilder::new()
+                                .num_threads(t.into())
+                                .build()
+                                .unwrap();
+
+                            pool.install(|| pipeline.palette_par())
+                        }
+                    }
+                );
+                print_palette(colors)
+            }
         }
         Quantizer::Neuquant { sample_frac } => {
             let image = image.into_rgba8();
@@ -197,22 +218,26 @@ fn main() {
                 color_quant::NeuQuant::new(sample_frac.into(), k.into_inner().into(), &image)
             );
 
-            let (colors, indices) = log!("remapping", {
-                let colors = nq
-                    .color_map_rgba()
-                    .chunks_exact(4)
-                    .map(|c| Srgb::new(c[0], c[1], c[2]))
-                    .collect();
+            let colors = nq
+                .color_map_rgba()
+                .chunks_exact(4)
+                .map(|c| Srgb::new(c[0], c[1], c[2]))
+                .collect();
 
-                let indices = image
-                    .chunks_exact(4)
-                    .map(|pix| nq.index_of(pix) as u8)
-                    .collect();
+            if let Some(output) = output {
+                let indices = log!(
+                    "remapping",
+                    image
+                        .chunks_exact(4)
+                        .map(|pix| nq.index_of(pix) as u8)
+                        .collect()
+                );
 
-                (colors, indices)
-            });
-
-            indexed_image(image.dimensions(), colors, indices)
+                let image = indexed_image(image.dimensions(), colors, indices);
+                log!("write image", image.save(output).unwrap())
+            } else {
+                print_palette(colors)
+            }
         }
         Quantizer::Imagequant { quality, dither_level } => {
             let image = image.into_rgba8();
@@ -235,17 +260,28 @@ fn main() {
 
             let mut quantized = log!("quantization", libq.quantize(&mut img).unwrap());
 
-            let (colors, indices) = log!("remapping", {
-                quantized.set_dithering_level(dither_level).unwrap();
-                quantized.remapped(&mut img).unwrap()
-            });
+            if let Some(output) = output {
+                let (colors, indices) = log!("remapping", {
+                    quantized.set_dithering_level(dither_level).unwrap();
+                    quantized.remapped(&mut img).unwrap()
+                });
 
-            let colors = colors
-                .into_par_iter()
-                .map(|c| Srgb::new(c.r, c.g, c.b))
-                .collect();
+                let colors = colors
+                    .into_par_iter()
+                    .map(|c| Srgb::new(c.r, c.g, c.b))
+                    .collect();
 
-            indexed_image(image.dimensions(), colors, indices)
+                let image = indexed_image(image.dimensions(), colors, indices);
+                log!("write image", image.save(output).unwrap())
+            } else {
+                let colors = quantized
+                    .palette()
+                    .iter()
+                    .map(|c| Srgb::new(c.r, c.g, c.b))
+                    .collect();
+
+                print_palette(colors)
+            }
         }
         Quantizer::Exoquant { kmeans, dither } => {
             let image = image.into_rgba8();
@@ -259,50 +295,77 @@ fn main() {
 
             let k = k.into_inner().into();
 
-            let (colors, indices) = log!(
-                "quantization and remapping",
-                match (kmeans, dither) {
-                    (true, true) => exoquant::convert_to_indexed(
-                        &pixels,
-                        width,
-                        k,
-                        &exoquant::optimizer::KMeans,
-                        &exoquant::ditherer::FloydSteinberg::new(),
-                    ),
-                    (true, false) => exoquant::convert_to_indexed(
-                        &pixels,
-                        width,
-                        k,
-                        &exoquant::optimizer::KMeans,
-                        &exoquant::ditherer::None,
-                    ),
-                    (false, true) => exoquant::convert_to_indexed(
-                        &pixels,
-                        width,
-                        k,
-                        &exoquant::optimizer::None,
-                        &exoquant::ditherer::FloydSteinberg::new(),
-                    ),
-                    (false, false) => exoquant::convert_to_indexed(
-                        &pixels,
-                        width,
-                        k,
-                        &exoquant::optimizer::None,
-                        &exoquant::ditherer::None,
-                    ),
-                }
-            );
+            if let Some(output) = output {
+                let (colors, indices) = log!(
+                    "quantization and remapping",
+                    match (kmeans, dither) {
+                        (true, true) => exoquant::convert_to_indexed(
+                            &pixels,
+                            width,
+                            k,
+                            &exoquant::optimizer::KMeans,
+                            &exoquant::ditherer::FloydSteinberg::new(),
+                        ),
+                        (true, false) => exoquant::convert_to_indexed(
+                            &pixels,
+                            width,
+                            k,
+                            &exoquant::optimizer::KMeans,
+                            &exoquant::ditherer::None,
+                        ),
+                        (false, true) => exoquant::convert_to_indexed(
+                            &pixels,
+                            width,
+                            k,
+                            &exoquant::optimizer::None,
+                            &exoquant::ditherer::FloydSteinberg::new(),
+                        ),
+                        (false, false) => exoquant::convert_to_indexed(
+                            &pixels,
+                            width,
+                            k,
+                            &exoquant::optimizer::None,
+                            &exoquant::ditherer::None,
+                        ),
+                    }
+                );
 
-            let colors = colors
-                .into_par_iter()
-                .map(|c| Srgb::new(c.r, c.g, c.b))
-                .collect();
+                let colors = colors
+                    .into_iter()
+                    .map(|c| Srgb::new(c.r, c.g, c.b))
+                    .collect();
 
-            indexed_image(image.dimensions(), colors, indices)
+                let image = indexed_image(image.dimensions(), colors, indices);
+                log!("write image", image.save(output).unwrap())
+            } else {
+                let colors = log!(
+                    "quantization",
+                    if kmeans {
+                        exoquant::generate_palette(
+                            &pixels.into_iter().collect(),
+                            &exoquant::SimpleColorSpace::default(),
+                            &exoquant::optimizer::KMeans,
+                            k,
+                        )
+                    } else {
+                        exoquant::generate_palette(
+                            &pixels.into_iter().collect(),
+                            &exoquant::SimpleColorSpace::default(),
+                            &exoquant::optimizer::None,
+                            k,
+                        )
+                    }
+                );
+
+                let colors = colors
+                    .into_iter()
+                    .map(|c| Srgb::new(c.r, c.g, c.b))
+                    .collect();
+
+                print_palette(colors)
+            }
         }
-    };
-
-    log!("write image", image.save(output).unwrap())
+    }
 }
 
 fn indexed_image(
@@ -323,4 +386,15 @@ fn indexed_image(
         // so buf should be large enough by nature of its construction
         RgbImage::from_vec(width, height, buf).unwrap()
     }
+}
+
+fn print_palette(palette: Vec<Srgb<u8>>) {
+    println!(
+        "{}",
+        palette
+            .into_iter()
+            .map(|color| format!("{color:X}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
 }
