@@ -17,7 +17,7 @@ use std::{
     path::PathBuf,
 };
 
-use clap::{Parser, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use image::{buffer::ConvertBuffer, RgbImage, RgbaImage};
 use palette::{IntoColor, Lab, LinSrgb, Oklab, Srgb};
 use quantette::{
@@ -89,8 +89,8 @@ impl From<CliColorSpace> for ColorSpace {
     }
 }
 
-#[derive(Parser)]
-struct Options {
+#[derive(Args)]
+struct Report {
     #[arg(short, long, default_value_t = Algorithm::Wu)]
     algo: Algorithm,
 
@@ -124,12 +124,7 @@ struct Options {
     images: Vec<PathBuf>,
 }
 
-fn parse_palette_size(s: &str) -> Result<PaletteSize, String> {
-    let value: u16 = s.parse().map_err(|e| format!("{e}"))?;
-    value.try_into().map_err(|e| format!("{e}"))
-}
-
-impl Options {
+impl Report {
     fn num_samples<Color, Component, const N: usize>(
         &self,
         color_counts: &impl ColorCounts<Color, Component, N>,
@@ -141,12 +136,49 @@ impl Options {
     }
 }
 
+#[derive(Subcommand)]
+enum Command {
+    Report(Report),
+    Compare { image_a: PathBuf, image_b: PathBuf },
+}
+
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+fn parse_palette_size(s: &str) -> Result<PaletteSize, String> {
+    let value: u16 = s.parse().map_err(|e| format!("{e}"))?;
+    value.try_into().map_err(|e| format!("{e}"))
+}
+
 const COL_WIDTH: usize = 10;
 const NUM_DECIMALS: usize = 4;
 
 fn main() {
-    let options = Options::parse();
+    let Cli { command } = Cli::parse();
 
+    match command {
+        Command::Report(options) => report(options),
+        Command::Compare { image_a, image_b } => {
+            let ds = dssim::new();
+            let a = image::open(image_a).unwrap().into_rgb8();
+            let b = image::open(image_b).unwrap().into_rgb8();
+            let a = ds
+                .create_image_rgb(a.as_rgb(), a.width() as usize, a.height() as usize)
+                .unwrap();
+
+            let b = ds
+                .create_image_rgb(b.as_rgb(), b.width() as usize, b.height() as usize)
+                .unwrap();
+
+            println!("{}", f64::from(ds.compare(&a, b).0))
+        }
+    }
+}
+
+fn report(options: Report) {
     let images = if options.images.is_empty() {
         util::load_cq100_images()
     } else {
@@ -176,7 +208,7 @@ fn main() {
     );
 
     fn each_image<F1, F2>(
-        options: &Options,
+        options: &Report,
         images: Vec<(String, RgbImage)>,
         name_len: usize,
         mut f1: F1,
@@ -208,7 +240,7 @@ fn main() {
     }
 
     fn each_image_color_counts<Color, Component, const N: usize>(
-        options: &Options,
+        options: &Report,
         images: Vec<(String, RgbImage)>,
         name_len: usize,
         convert_to: impl Fn(Srgb<u8>) -> Color + Sync,
@@ -245,7 +277,7 @@ fn main() {
     }
 
     fn each_image_color_counts_convert<Color, Component, const N: usize>(
-        options: &Options,
+        options: &Report,
         images: Vec<(String, RgbImage)>,
         name_len: usize,
         f: impl Fn(&IndexedColorCounts<Color, Component, N>, PaletteSize) -> (Vec<Color>, Vec<u8>)
