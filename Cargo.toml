@@ -77,6 +77,3 @@ name = "kmeans"
 harness = false
 path = "benches/kmeans.rs"
 
-[[example]]
-name = "plot"
-path = "examples/plot/plot.rs"
