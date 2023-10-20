@@ -673,8 +673,8 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     u32: Into<Component::Sum>,
 {
-    if let Some(output) = QuantizeOutput::trivial_palette(color_counts, palette_size) {
-        output
+    if palette_size.into_inner() == 0 {
+        QuantizeOutput::default()
     } else {
         Wu3::new(color_counts, binner).palette(palette_size)
     }
@@ -694,8 +694,8 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     u32: Into<Component::Sum>,
 {
-    if let Some(output) = QuantizeOutput::trivial_indexed_palette(color_counts, palette_size) {
-        output
+    if palette_size.into_inner() == 0 {
+        QuantizeOutput::default()
     } else {
         Wu3::new(color_counts, binner).indexed_palette(palette_size)
     }
@@ -715,8 +715,8 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     u32: Into<Component::Sum>,
 {
-    if let Some(output) = QuantizeOutput::trivial_palette(color_counts, palette_size) {
-        output
+    if palette_size.into_inner() == 0 {
+        QuantizeOutput::default()
     } else {
         Wu3::new_par(color_counts, binner).palette(palette_size)
     }
@@ -737,8 +737,8 @@ where
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     u32: Into<Component::Sum>,
 {
-    if let Some(output) = QuantizeOutput::trivial_indexed_palette(color_counts, palette_size) {
-        output
+    if palette_size.into_inner() == 0 {
+        QuantizeOutput::default()
     } else {
         Wu3::new_par(color_counts, binner).indexed_palette_par(palette_size)
     }

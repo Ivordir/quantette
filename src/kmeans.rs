@@ -363,10 +363,8 @@ where
     Component: Copy + Into<f32> + 'static,
     f32: AsPrimitive<Component>,
 {
-    if let Some(output) =
-        QuantizeOutput::trivial_palette(color_counts, initial_centroids.palette_size())
-    {
-        output
+    if initial_centroids.is_empty() {
+        QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
         state.online_kmeans(num_samples, seed);
@@ -392,10 +390,8 @@ where
     Component: Copy + Into<f32> + 'static,
     f32: AsPrimitive<Component>,
 {
-    if let Some(output) =
-        QuantizeOutput::trivial_indexed_palette(color_counts, initial_centroids.palette_size())
-    {
-        output
+    if initial_centroids.is_empty() {
+        QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
         state.online_kmeans(num_samples, seed);
@@ -533,10 +529,8 @@ where
     Component: Copy + Into<f32> + 'static + Send + Sync,
     f32: AsPrimitive<Component>,
 {
-    if let Some(output) =
-        QuantizeOutput::trivial_palette(color_counts, initial_centroids.palette_size())
-    {
-        output
+    if initial_centroids.is_empty() || batch_size == 0 {
+        QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
         state.minibatch_kmeans(num_samples, batch_size, seed);
@@ -565,10 +559,8 @@ where
     Component: Copy + Into<f32> + 'static + Send + Sync,
     f32: AsPrimitive<Component>,
 {
-    if let Some(output) =
-        QuantizeOutput::trivial_indexed_palette(color_counts, initial_centroids.palette_size())
-    {
-        output
+    if initial_centroids.is_empty() || batch_size == 0 {
+        QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
         state.minibatch_kmeans(num_samples, batch_size, seed);
