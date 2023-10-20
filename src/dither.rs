@@ -312,10 +312,10 @@ impl FloydSteinberg {
                     }
                 }
             }
-        }
 
-        std::mem::swap(&mut error1, &mut error2);
-        error2[1] = [0.0; N];
-        error2[width] = [0.0; N];
+            std::mem::swap(&mut error1, &mut error2);
+            error2[1] = [0.0; N];
+            error2[width] = [0.0; N];
+        }
     }
 }
