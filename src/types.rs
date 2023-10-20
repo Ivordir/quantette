@@ -1,6 +1,6 @@
 //! Contains various type needed across the crate.
 
-use crate::{ColorComponents, ColorCounts, MAX_COLORS, MAX_PIXELS};
+use crate::{MAX_COLORS, MAX_PIXELS};
 
 use std::{
     error::Error,
@@ -67,6 +67,12 @@ impl<'a, Color> Clone for ColorSlice<'a, Color> {
 impl<'a, Color> Copy for ColorSlice<'a, Color> {}
 
 impl<'a, Color> ColorSlice<'a, Color> {
+    /// Creates a [`ColorSlice`] without ensuring that its length
+    /// is less than or equal to [`MAX_PIXELS`].
+    pub(crate) fn new_unchecked(colors: &'a [Color]) -> Self {
+        Self(colors)
+    }
+
     /// Creates a new [`ColorSlice`] by truncating the input slice to a max length of [`MAX_PIXELS`].
     pub fn from_truncated(colors: &'a [Color]) -> Self {
         Self(&colors[..colors.len().min(MAX_PIXELS as usize)])
@@ -167,16 +173,16 @@ impl PaletteSize {
         self.0
     }
 
-    /// Creates a [`PaletteSize`] by clamping the given `u16` to be less than or equal to [`MAX_COLORS`].
-    #[must_use]
-    pub fn from_clamped(value: u16) -> Self {
-        Self(u16::min(value, MAX_COLORS))
-    }
-
     /// Creates a [`PaletteSize`] directly from the given `u16`
     /// without ensuring that it is less than or equal to [`MAX_COLORS`].
     pub(crate) fn new_unchecked(value: u16) -> Self {
         Self(value)
+    }
+
+    /// Creates a [`PaletteSize`] by clamping the given `u16` to be less than or equal to [`MAX_COLORS`].
+    #[must_use]
+    pub fn from_clamped(value: u16) -> Self {
+        Self(u16::min(value, MAX_COLORS))
     }
 }
 

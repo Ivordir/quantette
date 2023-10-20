@@ -67,6 +67,12 @@ impl<Color> Centroids<Color> {
         self.0
     }
 
+    /// Creates a [`Centroids`] without ensuring that its length
+    /// is less than or equal to [`MAX_COLORS`].
+    pub(crate) fn new_unchecked(centroids: Vec<Color>) -> Self {
+        Self(centroids)
+    }
+
     /// Creates a new [`Centroids`] by truncating the given `Vec` of colors to a max length of [`MAX_COLORS`].
     #[must_use]
     pub fn from_truncated(mut centroids: Vec<Color>) -> Self {

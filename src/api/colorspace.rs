@@ -161,7 +161,7 @@ impl QuantizeMethod<Srgb<u8>> {
                 batch_size,
             }) => QuantizeMethod::Kmeans(KmeansOptions {
                 initial_centroids: initial_centroids.map(|c| {
-                    Centroids::from_truncated(c.into_inner().into_iter().map(&convert_to).collect())
+                    Centroids::new_unchecked(c.into_inner().into_iter().map(&convert_to).collect())
                 }),
                 sampling_factor,
                 seed,

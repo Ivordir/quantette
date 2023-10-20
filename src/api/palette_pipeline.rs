@@ -298,7 +298,7 @@ impl<'a> PalettePipeline<'a> {
             palette(&color_counts, k, quantize_method, binner)
         } else {
             let colors = convert_color_slice(colors, convert_to);
-            let colors = ColorSlice::from_truncated(&colors);
+            let colors = ColorSlice::new_unchecked(&colors);
             palette(&colors, k, quantize_method, binner)
         };
 
@@ -380,7 +380,7 @@ impl<'a> PalettePipeline<'a> {
             palette_par(&color_counts, k, quantize_method, binner)
         } else {
             let colors = convert_color_slice_par(colors, convert_to);
-            let colors = ColorSlice::from_truncated(&colors);
+            let colors = ColorSlice::new_unchecked(&colors);
             palette_par(&colors, k, quantize_method, binner)
         };
 
@@ -409,7 +409,7 @@ where
             sampling_factor, initial_centroids, seed, ..
         }) => {
             let initial_centroids = initial_centroids.unwrap_or_else(|| {
-                Centroids::from_truncated(wu::palette(color_counts, k, binner).palette)
+                Centroids::new_unchecked(wu::palette(color_counts, k, binner).palette)
             });
 
             let num_samples = num_samples(sampling_factor, color_counts);
@@ -444,7 +444,7 @@ where
             batch_size,
         }) => {
             let initial_centroids = initial_centroids.unwrap_or_else(|| {
-                Centroids::from_truncated(wu::palette_par(color_counts, k, binner).palette)
+                Centroids::new_unchecked(wu::palette_par(color_counts, k, binner).palette)
             });
 
             let num_samples = num_samples(sampling_factor, color_counts);
