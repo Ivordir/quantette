@@ -103,7 +103,6 @@ impl<Color> KmeansOptions<Color> {
 
 /// Returns the number of samples to run based off the sampling factor.
 #[cfg(feature = "kmeans")]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn num_samples<Color, Component, const N: usize>(
     sampling_factor: f32,
     color_counts: &impl ColorCounts<Color, Component, N>,
@@ -111,7 +110,10 @@ fn num_samples<Color, Component, const N: usize>(
 where
     Color: ColorComponents<Component, N>,
 {
-    (f64::from(sampling_factor) * f64::from(color_counts.num_colors())) as u32
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    {
+        (f64::from(sampling_factor) * f64::from(color_counts.num_colors())) as u32
+    }
 }
 
 /// The set of supported color quantization methods.

@@ -11,7 +11,7 @@ Consider enabling the `avx` or `avx2`
 [target features](https://doc.rust-lang.org/reference/conditional-compilation.html#target_feature)
 for a noticeable speed up if your target architecture supports these features.
 If the `threads` cargo feature is enabled, multi-threaded versions of most functions
-become available for even greater speedup.
+become available for even greater speed up.
 
 # Examples
 
