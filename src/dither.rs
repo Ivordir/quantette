@@ -32,18 +32,18 @@ impl Default for FloydSteinberg {
     }
 }
 
+/// Squared euclidean distance between two points.
+fn squared_euclidean_distance<const N: usize>(x: [f32; N], y: [f32; N]) -> f32 {
+    let mut dist = 0.0;
+    for c in 0..N {
+        let d = x[c] - y[c];
+        dist += d * d;
+    }
+    dist
+}
+
 /// Constructs a nearest neighbor distance table for the given palette.
 fn distance_table<const N: usize>(palette: &[[f32; N]]) -> (Vec<f32>, Vec<(u32x8, [f32x8; N])>) {
-    /// Squared euclidean distance between two points.
-    fn squared_euclidean_distance<const N: usize>(x: [f32; N], y: [f32; N]) -> f32 {
-        let mut dist = 0.0;
-        for c in 0..N {
-            let d = x[c] - y[c];
-            dist += d * d;
-        }
-        dist
-    }
-
     let k = palette.len();
     let mut distances = vec![(0, 0.0); k * k];
     #[allow(clippy::cast_possible_truncation)]
@@ -88,7 +88,10 @@ fn distance_table<const N: usize>(palette: &[[f32; N]]) -> (Vec<f32>, Vec<(u32x8
         }
     }
 
-    let distances = distances.into_iter().step_by(8).collect();
+    let distances = distances
+        .chunks_exact(k)
+        .flat_map(|row| row.iter().copied().step_by(8))
+        .collect();
 
     (distances, components)
 }
@@ -123,9 +126,11 @@ fn nearest_neighbor<const N: usize>(
     .reduce(|a, b| a + b)
     .unwrap();
 
+    let dist = min_distance.as_array_ref()[0];
+
     let row = (row_start + 1)..row_end;
     for (&(neighbor, chunk), &half_dist) in components[row.clone()].iter().zip(&distances[row]) {
-        if min_distance.cmp_le(half_dist).any() {
+        if dist < half_dist {
             break;
         }
 
@@ -310,6 +315,107 @@ impl FloydSteinberg {
             std::mem::swap(&mut error1, &mut error2);
             error2[1] = [0.0; N];
             error2[width] = [0.0; N];
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::tests::*;
+
+    use ordered_float::OrderedFloat;
+
+    #[test]
+    fn components_match_indices() {
+        let k = 249; // use non-multiple of 8 to test remainder handling
+        let centroids = to_float_arrays(&test_data_256()[..k]);
+        let (_, components) = distance_table(&centroids);
+
+        let mut expected = components
+            .iter()
+            .flat_map(|&(indices, _)| indices.as_array_ref().map(|i| centroids[i as usize]))
+            .collect::<Vec<_>>();
+
+        for row in expected.chunks_exact_mut(k.next_multiple_of(8)) {
+            row[k..].fill([f32::INFINITY; 3]);
+        }
+
+        let actual = components
+            .into_iter()
+            .flat_map(|(_, components)| {
+                array::from_fn::<_, 8, _>(|i| components.map(|c| c.as_array_ref()[i]))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn distances_match_components() {
+        let k = 249; // use non-multiple of 8 to test remainder handling
+        let centroids = to_float_arrays(&test_data_256()[..k]);
+        let (distances, components) = distance_table(&centroids);
+
+        let expected = components
+            .chunks_exact(k.div_ceil(8))
+            .zip(&centroids)
+            .flat_map(|(row, &centroid)| {
+                row.iter().map(move |(_, components)| {
+                    squared_euclidean_distance(centroid, components.map(|c| c.as_array_ref()[0]))
+                        / 4.0
+                })
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(expected, distances);
+    }
+
+    #[test]
+    fn distances_are_ascending() {
+        let k = 249; // use non-multiple of 8 to test remainder handling
+        let centroids = to_float_arrays(&test_data_256()[..k]);
+        let (distances, _) = distance_table(&centroids);
+
+        let row_len = k.div_ceil(8);
+        for row in distances.chunks_exact(row_len) {
+            for i in 1..row_len {
+                assert!(row[i - 1] <= row[i]);
+            }
+        }
+    }
+
+    #[test]
+    fn naive_nearest_neighbor_oracle() {
+        let k = 249; // use non-multiple of 8 to test remainder handling
+        let centroids = to_float_arrays(&test_data_256()[..k]);
+        let points = to_float_arrays(&test_data_1024());
+
+        let (distances, components) = distance_table(&centroids);
+
+        for (i, color) in points.into_iter().enumerate() {
+            #[allow(clippy::unwrap_used)]
+            let expected = centroids
+                .iter()
+                .map(|&centroid| OrderedFloat(squared_euclidean_distance(centroid, color)))
+                .min()
+                .unwrap()
+                .0;
+
+            // should give correct results regardless of guess
+            #[allow(clippy::cast_possible_truncation)]
+            let guess = (i % k) as u8;
+
+            let actual = squared_euclidean_distance(
+                color,
+                nearest_neighbor(guess, color, &centroids, &distances, &components).1,
+            );
+
+            #[allow(clippy::float_cmp)]
+            {
+                assert_eq!(expected, actual);
+            }
         }
     }
 }
