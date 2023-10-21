@@ -220,6 +220,8 @@ impl<'a> ImagePipeline<'a> {
     ///
     /// A value of `1.0` diffuses all error to the neighboring pixels and may result in color bleed.
     /// Values less than `1.0` only diffuse part of the error for a more tamed dither.
+    /// The given `diffusion` should be in the range `0.0..=1.0`,
+    /// otherwise the default error diffusion will be used as a fallback.
     ///
     /// The default value is [`FloydSteinberg::DEFAULT_ERROR_DIFFUSION`].
     #[must_use]
@@ -252,7 +254,10 @@ impl<'a> ImagePipeline<'a> {
     /// Creates the ditherer specified by the current options.
     fn ditherer(&self) -> Option<FloydSteinberg> {
         if self.dither {
-            Some(FloydSteinberg(self.dither_error_diffusion))
+            Some(
+                FloydSteinberg::with_error_diffusion(self.dither_error_diffusion)
+                    .unwrap_or_default(),
+            )
         } else {
             None
         }

@@ -258,14 +258,16 @@ fn report(options: Report) {
             move |k| {
                 let (colors, mut indices) = f(&color_counts, k);
                 if options.dither {
-                    FloydSteinberg(options.dither_error_diffusion).dither_indexed(
-                        &colors,
-                        &mut indices,
-                        color_counts.colors(),
-                        color_counts.indices(),
-                        image.width(),
-                        image.height(),
-                    )
+                    FloydSteinberg::with_error_diffusion(options.dither_error_diffusion)
+                        .unwrap()
+                        .dither_indexed(
+                            &colors,
+                            &mut indices,
+                            color_counts.colors(),
+                            color_counts.indices(),
+                            image.width(),
+                            image.height(),
+                        )
                 }
                 let colors = colors.into_iter().map(convert_from).collect::<Vec<_>>();
                 indices

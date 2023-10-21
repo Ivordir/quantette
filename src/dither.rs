@@ -9,11 +9,8 @@ use palette::cast::AsArrays;
 use wide::{f32x8, u32x8, CmpLe};
 
 /// Floyd–Steinberg dithering.
-///
-/// The inner `f32` value denotes the error diffusion factor.
-/// E.g, a factor of `1.0` diffuses all of the error to the neighboring pixels.
 #[derive(Debug, Clone, Copy)]
-pub struct FloydSteinberg(pub f32);
+pub struct FloydSteinberg(f32);
 
 impl FloydSteinberg {
     /// The default error diffusion factor.
@@ -26,9 +23,24 @@ impl FloydSteinberg {
     }
 
     /// Creates a new [`FloydSteinberg`] with the given error diffusion factor.
+    ///
+    /// For example, a factor of `1.0` diffuses all of the error to the neighboring pixels.
+    ///
+    /// # Errors
+    /// Returns `None` if `error_diffusion` in not in the range `0.0..=1.0`.
     #[must_use]
-    pub fn with_error_diffusion(error_diffusion: f32) -> Self {
-        Self(error_diffusion)
+    pub fn with_error_diffusion(error_diffusion: f32) -> Option<Self> {
+        if (0.0..=1.0).contains(&error_diffusion) {
+            Some(Self(error_diffusion))
+        } else {
+            None
+        }
+    }
+
+    /// Gets the error diffusion factor for this [`FloydSteinberg`]
+    #[must_use]
+    pub fn error_diffusion(&self) -> f32 {
+        self.0
     }
 }
 
@@ -201,11 +213,12 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N>,
         Component: Copy + Into<f32>,
     {
-        if palette.is_empty() || width * height == 0 {
+        let FloydSteinberg(diffusion) = *self;
+
+        if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
             return;
         }
 
-        let FloydSteinberg(diffusion) = *self;
         let width = width as usize;
 
         let palette = palette
@@ -275,11 +288,12 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N>,
         Component: Copy + Into<f32>,
     {
-        if palette.is_empty() || width * height == 0 {
+        let FloydSteinberg(diffusion) = *self;
+
+        if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
             return;
         }
 
-        let FloydSteinberg(diffusion) = *self;
         let width = width as usize;
 
         let palette = palette
