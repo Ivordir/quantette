@@ -462,4 +462,42 @@ mod tests {
         let indices = (0..len).collect::<Vec<_>>();
         ditherer.dither_indexed::<Srgb<u8>, u8, 3>(&[], &mut [], &colors, &indices, len, 1);
     }
+
+    #[test]
+    fn exact_match_image_unaffected() {
+        let ditherer = FloydSteinberg::new();
+
+        let palette = test_data_256();
+        let indices = {
+            #[allow(clippy::cast_possible_truncation)]
+            let indices = (0..palette.len()).map(|i| i as u8).collect::<Vec<_>>();
+            let mut indices = [indices.as_slice(); 4].concat();
+            indices.rotate_right(7);
+            indices
+        };
+
+        let width = 32;
+        let height = 32;
+        assert_eq!(width as usize * height as usize, indices.len());
+
+        let mut new_indices = indices.clone();
+        let original_colors = indices
+            .iter()
+            .map(|&i| palette[usize::from(i)])
+            .collect::<Vec<_>>();
+        ditherer.dither(&palette, &mut new_indices, &original_colors, width, height);
+        assert_eq!(indices, new_indices);
+
+        let mut new_indices = indices.clone();
+        let original_indices = indices.iter().copied().map(u32::from).collect::<Vec<_>>();
+        ditherer.dither_indexed(
+            &palette,
+            &mut new_indices,
+            &palette,
+            &original_indices,
+            width,
+            height,
+        );
+        assert_eq!(indices, new_indices);
+    }
 }
