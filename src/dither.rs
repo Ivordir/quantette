@@ -166,6 +166,14 @@ fn arr_mul_add_assign<const N: usize>(arr: &mut [f32; N], alpha: f32, other: &[f
     }
 }
 
+/// Multiplies `other` by a scalar, `alpha`, and assigns the result to `arr`.
+#[inline]
+fn arr_mul_assign<const N: usize>(arr: &mut [f32; N], alpha: f32, other: &[f32; N]) {
+    for i in 0..N {
+        arr[i] = alpha * other[i];
+    }
+}
+
 impl FloydSteinberg {
     /// Performs dithering on the given indices.
     ///
@@ -226,20 +234,12 @@ impl FloydSteinberg {
                     arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
-
-                    let e = &mut error2[x + 2];
-                    for i in 0..N {
-                        e[i] = (1.0 / 16.0) * err[i];
-                    }
+                    arr_mul_assign(&mut error2[x + 2], 1.0 / 16.0, &err);
                 } else {
                     arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
-
-                    let e = &mut error2[x];
-                    for i in 0..N {
-                        e[i] = (1.0 / 16.0) * err[i];
-                    }
+                    arr_mul_assign(&mut error2[x], 1.0 / 16.0, &err);
                 }
             }
 
@@ -298,20 +298,12 @@ impl FloydSteinberg {
                     arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
-
-                    let e = &mut error2[x + 2];
-                    for i in 0..N {
-                        e[i] = (1.0 / 16.0) * err[i];
-                    }
+                    arr_mul_assign(&mut error2[x + 2], 1.0 / 16.0, &err);
                 } else {
                     arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
-
-                    let e = &mut error2[x];
-                    for i in 0..N {
-                        e[i] = (1.0 / 16.0) * err[i];
-                    }
+                    arr_mul_assign(&mut error2[x], 1.0 / 16.0, &err);
                 }
             }
 
