@@ -24,6 +24,12 @@ impl FloydSteinberg {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Creates a new [`FloydSteinberg`] with the given error diffusion factor.
+    #[must_use]
+    pub fn with_error_diffusion(error_diffusion: f32) -> Self {
+        Self(error_diffusion)
+    }
 }
 
 impl Default for FloydSteinberg {
@@ -195,9 +201,12 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N>,
         Component: Copy + Into<f32>,
     {
+        if palette.is_empty() || width * height == 0 {
+            return;
+        }
+
         let FloydSteinberg(diffusion) = *self;
         let width = width as usize;
-        let _ = height; // not needed for now
 
         let palette = palette
             .as_arrays()
@@ -266,9 +275,12 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N>,
         Component: Copy + Into<f32>,
     {
+        if palette.is_empty() || width * height == 0 {
+            return;
+        }
+
         let FloydSteinberg(diffusion) = *self;
         let width = width as usize;
-        let _ = height; // not needed for now
 
         let palette = palette
             .as_arrays()
@@ -326,6 +338,7 @@ mod tests {
     use crate::tests::*;
 
     use ordered_float::OrderedFloat;
+    use palette::Srgb;
 
     #[test]
     fn components_match_indices() {
@@ -417,5 +430,22 @@ mod tests {
                 assert_eq!(expected, actual);
             }
         }
+    }
+
+    #[test]
+    fn empty_inputs() {
+        let ditherer = FloydSteinberg::new();
+
+        // empty image and palette
+        ditherer.dither::<Srgb<u8>, u8, 3>(&[], &mut [], &[], 0, 0);
+        ditherer.dither_indexed::<Srgb<u8>, u8, 3>(&[], &mut [], &[], &[], 0, 0);
+
+        // only empty palette
+        let colors = test_data_1024();
+        #[allow(clippy::cast_possible_truncation)]
+        let len = colors.len() as u32;
+        ditherer.dither::<Srgb<u8>, u8, 3>(&[], &mut [], &colors, len, 1);
+        let indices = (0..len).collect::<Vec<_>>();
+        ditherer.dither_indexed::<Srgb<u8>, u8, 3>(&[], &mut [], &colors, &indices, len, 1);
     }
 }
