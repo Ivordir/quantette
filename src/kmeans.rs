@@ -369,11 +369,13 @@ where
     Component: Copy + Into<f32> + 'static,
     f32: AsPrimitive<Component>,
 {
-    if initial_centroids.is_empty() {
+    if initial_centroids.is_empty() || color_counts.is_empty() {
         QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
-        state.online_kmeans(num_samples, seed);
+        if num_samples > 0 {
+            state.online_kmeans(num_samples, seed);
+        }
         state.into_summary(Vec::new())
     }
 }
@@ -396,11 +398,13 @@ where
     Component: Copy + Into<f32> + 'static,
     f32: AsPrimitive<Component>,
 {
-    if initial_centroids.is_empty() {
+    if initial_centroids.is_empty() || color_counts.is_empty() {
         QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
-        state.online_kmeans(num_samples, seed);
+        if num_samples > 0 {
+            state.online_kmeans(num_samples, seed);
+        }
         let indices = state.indices();
         state.into_summary(color_counts.map_indices(indices))
     }
@@ -535,11 +539,13 @@ where
     Component: Copy + Into<f32> + 'static + Send + Sync,
     f32: AsPrimitive<Component>,
 {
-    if initial_centroids.is_empty() || batch_size == 0 {
+    if initial_centroids.is_empty() || color_counts.is_empty() {
         QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
-        state.minibatch_kmeans(num_samples, batch_size, seed);
+        if num_samples >= batch_size && batch_size > 0 {
+            state.minibatch_kmeans(num_samples, batch_size, seed);
+        }
         state.into_summary(Vec::new())
     }
 }
@@ -565,11 +571,13 @@ where
     Component: Copy + Into<f32> + 'static + Send + Sync,
     f32: AsPrimitive<Component>,
 {
-    if initial_centroids.is_empty() || batch_size == 0 {
+    if initial_centroids.is_empty() || color_counts.is_empty() {
         QuantizeOutput::default()
     } else {
         let mut state = State::new(color_counts, initial_centroids.into());
-        state.minibatch_kmeans(num_samples, batch_size, seed);
+        if num_samples >= batch_size && batch_size > 0 {
+            state.minibatch_kmeans(num_samples, batch_size, seed);
+        }
         let indices = state.indices_par();
         state.into_summary(color_counts.map_indices_par(indices))
     }
