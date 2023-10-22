@@ -582,3 +582,329 @@ where
         state.into_summary(color_counts.map_indices_par(indices))
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    use crate::{tests::*, ColorSlice};
+
+    use std::fmt::Debug;
+
+    use ordered_float::OrderedFloat;
+    use palette::Srgb;
+
+    fn assert_output_eq<Color: Debug + PartialEq>(
+        actual: &QuantizeOutput<Color>,
+        expected: &QuantizeOutput<Color>,
+    ) {
+        assert_eq!(actual.palette, expected.palette);
+        assert_eq!(actual.counts, expected.counts);
+        assert_eq!(actual.indices, expected.indices);
+    }
+
+    fn test_centroids() -> Centroids<Srgb<u8>> {
+        let mut centroids = test_data_256();
+        centroids.truncate(249); // use non-multiple of 8 to test remainder handling
+        Centroids::try_from(centroids).unwrap()
+    }
+
+    #[test]
+    fn empty_inputs() {
+        let colors = test_data_1024();
+        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
+        let num_samples = 505;
+        let centroids = test_centroids();
+        let seed = 0;
+
+        let empty_output = QuantizeOutput::default();
+
+        let empty_colors = &ColorSlice::new_unchecked(&[]);
+        assert_output_eq(
+            &palette(empty_colors, num_samples, centroids.clone(), seed),
+            &empty_output,
+        );
+        assert_output_eq(
+            &indexed_palette(empty_colors, num_samples, centroids.clone(), seed),
+            &empty_output,
+        );
+
+        let empty_centroids = Centroids::new_unchecked(Vec::new());
+        assert_output_eq(
+            &palette(colors, num_samples, empty_centroids.clone(), seed),
+            &empty_output,
+        );
+        assert_output_eq(
+            &indexed_palette(colors, num_samples, empty_centroids.clone(), seed),
+            &empty_output,
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "threads")]
+    fn empty_inputs_par() {
+        let colors = test_data_1024();
+        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
+        let num_samples = 505;
+        let centroids = test_centroids();
+        let seed = 0;
+        let batch_size = 64;
+
+        let empty_output = QuantizeOutput::default();
+
+        let empty_colors = &ColorSlice::new_unchecked(&[]);
+        assert_output_eq(
+            &palette_par(
+                empty_colors,
+                num_samples,
+                batch_size,
+                centroids.clone(),
+                seed,
+            ),
+            &empty_output,
+        );
+        assert_output_eq(
+            &indexed_palette_par(
+                empty_colors,
+                num_samples,
+                batch_size,
+                centroids.clone(),
+                seed,
+            ),
+            &empty_output,
+        );
+
+        let empty_centroids = Centroids::new_unchecked(Vec::new());
+        assert_output_eq(
+            &palette_par(
+                colors,
+                num_samples,
+                batch_size,
+                empty_centroids.clone(),
+                seed,
+            ),
+            &empty_output,
+        );
+        assert_output_eq(
+            &indexed_palette_par(
+                colors,
+                num_samples,
+                batch_size,
+                empty_centroids.clone(),
+                seed,
+            ),
+            &empty_output,
+        );
+    }
+
+    #[test]
+    fn no_samples_gives_initial_centroids() {
+        let colors = test_data_1024();
+        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
+        let num_samples = 0;
+        let centroids = test_centroids();
+        let seed = 0;
+
+        let actual = palette(colors, num_samples, centroids.clone(), seed);
+        let expected = QuantizeOutput {
+            palette: centroids.to_vec(),
+            counts: vec![0; centroids.len()],
+            indices: Vec::new(),
+        };
+        assert_output_eq(&actual, &expected);
+
+        let actual = indexed_palette(colors, num_samples, centroids.clone(), seed);
+        assert_eq!(actual.indices.len(), colors.len());
+        let expected = QuantizeOutput {
+            indices: actual.indices.clone(),
+            ..expected
+        };
+        assert_output_eq(&actual, &expected);
+    }
+
+    #[test]
+    #[cfg(feature = "threads")]
+    fn no_samples_gives_initial_centroids_par() {
+        let colors = test_data_1024();
+        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
+        let centroids = test_centroids();
+        let seed = 0;
+
+        let expected = QuantizeOutput {
+            palette: centroids.to_vec(),
+            counts: vec![0; centroids.len()],
+            indices: Vec::new(),
+        };
+
+        let num_samples = 0;
+        let batch_size = 64;
+        let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+        assert_output_eq(&actual, &expected);
+        let actual = indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+        assert_eq!(actual.indices.len(), colors.len());
+        let expected_indexed = QuantizeOutput {
+            indices: actual.indices.clone(),
+            ..expected.clone()
+        };
+        assert_output_eq(&actual, &expected_indexed);
+
+        let num_samples = 505;
+        let batch_size = 0;
+        let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+        assert_output_eq(&actual, &expected);
+        let actual = indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+        assert_eq!(actual.indices.len(), colors.len());
+        let expected_indexed = QuantizeOutput {
+            indices: actual.indices.clone(),
+            ..expected.clone()
+        };
+        assert_output_eq(&actual, &expected_indexed);
+    }
+
+    #[test]
+    fn exact_match_image_unaffected() {
+        let centroids = test_centroids();
+
+        let indices = {
+            #[allow(clippy::cast_possible_truncation)]
+            let indices = (0..centroids.len()).map(|i| i as u8).collect::<Vec<_>>();
+            let mut indices = [indices.as_slice(); 4].concat();
+            indices.rotate_right(7);
+            indices
+        };
+
+        let colors = indices
+            .iter()
+            .map(|&i| centroids[usize::from(i)])
+            .collect::<Vec<_>>();
+
+        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
+
+        let num_samples = 505;
+        let seed = 0;
+
+        let actual = palette(colors, num_samples, centroids.clone(), seed);
+        assert_eq!(actual.counts.len(), centroids.len());
+        let expected = QuantizeOutput {
+            palette: centroids.to_vec(),
+            counts: actual.counts.clone(),
+            indices: Vec::new(),
+        };
+        assert_output_eq(&actual, &expected);
+        assert_eq!(actual.counts.into_iter().sum::<u32>(), num_samples);
+
+        let actual = indexed_palette(colors, num_samples, centroids.clone(), seed);
+        assert_eq!(actual.counts.len(), expected.palette.len());
+        let expected = QuantizeOutput {
+            palette: expected.palette,
+            counts: actual.counts.clone(),
+            indices,
+        };
+        assert_output_eq(&actual, &expected);
+        assert_eq!(actual.counts.into_iter().sum::<u32>(), num_samples);
+    }
+
+    #[test]
+    #[cfg(feature = "threads")]
+    fn exact_match_image_unaffected_par() {
+        let centroids = test_centroids();
+
+        let indices = {
+            #[allow(clippy::cast_possible_truncation)]
+            let indices = (0..centroids.len()).map(|i| i as u8).collect::<Vec<_>>();
+            let mut indices = [indices.as_slice(); 4].concat();
+            indices.rotate_right(7);
+            indices
+        };
+
+        let colors = indices
+            .iter()
+            .map(|&i| centroids[usize::from(i)])
+            .collect::<Vec<_>>();
+
+        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
+
+        let num_samples = 505;
+        let seed = 0;
+        let batch_size = 64;
+
+        let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+        assert_eq!(actual.counts.len(), centroids.len());
+        let expected = QuantizeOutput {
+            palette: centroids.to_vec(),
+            counts: actual.counts.clone(),
+            indices: Vec::new(),
+        };
+        assert_output_eq(&actual, &expected);
+        assert_eq!(
+            actual.counts.into_iter().sum::<u32>(),
+            num_samples - num_samples % batch_size
+        );
+
+        let actual = indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+        assert_eq!(actual.counts.len(), expected.palette.len());
+        let expected = QuantizeOutput {
+            palette: expected.palette,
+            counts: actual.counts.clone(),
+            indices,
+        };
+        assert_output_eq(&actual, &expected);
+        assert_eq!(
+            actual.counts.into_iter().sum::<u32>(),
+            num_samples - num_samples % batch_size
+        );
+    }
+
+    #[test]
+    fn naive_nearest_neighbor_oracle() {
+        fn squared_euclidean_distance<const N: usize>(x: [f32; N], y: [f32; N]) -> f32 {
+            let mut dist = 0.0;
+            for c in 0..N {
+                let d = x[c] - y[c];
+                dist += d * d;
+            }
+            dist
+        }
+
+        let centroids = to_float_arrays(&test_centroids());
+        let points = to_float_arrays(&test_data_1024());
+
+        let mut components = Vec::with_capacity(centroids.len().next_multiple_of(8));
+        let chunks = centroids.chunks_exact(8);
+        components.extend(
+            chunks
+                .clone()
+                .map(|chunk| array::from_fn(|i| f32x8::new(array::from_fn(|j| chunk[j][i])))),
+        );
+
+        if !chunks.remainder().is_empty() {
+            let mut arr = [[f32::INFINITY; 8]; 3];
+            for (i, &color) in chunks.remainder().iter().enumerate() {
+                for (arr, c) in arr.iter_mut().zip(color) {
+                    arr[i] = c;
+                }
+            }
+            components.push(arr.map(f32x8::new));
+        }
+
+        for color in points {
+            #[allow(clippy::unwrap_used)]
+            let expected = centroids
+                .iter()
+                .map(|&centroid| OrderedFloat(squared_euclidean_distance(centroid, color)))
+                .min()
+                .unwrap()
+                .0;
+
+            let (chunk, lane) = simd_argmin(&components, color);
+            let index = usize::from(chunk) * 8 + usize::from(lane);
+            let actual = squared_euclidean_distance(color, centroids[index]);
+
+            #[allow(clippy::float_cmp)]
+            {
+                assert_eq!(expected, actual);
+            }
+        }
+    }
+}
