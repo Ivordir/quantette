@@ -15,7 +15,8 @@ use crate::AboveMaxLen;
 #[cfg(feature = "colorspaces")]
 use crate::{
     colorspace::{convert_color_slice, from_srgb, to_srgb},
-    Binner3, SumPromotion, ZeroedIsZero,
+    wu::Binner3,
+    SumPromotion, ZeroedIsZero,
 };
 #[cfg(feature = "kmeans")]
 use crate::{

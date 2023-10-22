@@ -88,16 +88,11 @@ pub use types::*;
 #[cfg(feature = "pipelines")]
 pub use api::*;
 
-use wu::{Binner3, FloatBinner, UIntBinner};
-
 /// The maximum supported image size in number of pixels is `u32::MAX`.
 pub const MAX_PIXELS: u32 = u32::MAX;
 
 /// The maximum supported number of palette colors is `256`.
 pub const MAX_COLORS: u16 = u8::MAX as u16 + 1;
-
-/// `MAX_COLORS` as a `usize` for array and `Vec` lengths.
-pub(crate) const MAX_K: usize = MAX_COLORS as usize;
 
 #[cfg(test)]
 mod tests {

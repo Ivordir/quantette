@@ -1,6 +1,9 @@
 //! Contains the code for color/pixel deduplication and associated traits and types.
 
-use crate::{AboveMaxLen, ColorComponents, ColorSlice, ZeroedIsZero};
+use crate::{ColorComponents, ColorSlice, ZeroedIsZero};
+
+#[cfg(feature = "image")]
+use crate::AboveMaxLen;
 
 use std::{marker::PhantomData, ops::Range};
 

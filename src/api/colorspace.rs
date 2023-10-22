@@ -1,11 +1,14 @@
 //! Contains the supported color spaces and utility functions for converting between them.
 
-use crate::{Binner3, QuantizeMethod, UIntBinner};
+use crate::{
+    wu::{Binner3, UIntBinner},
+    QuantizeMethod,
+};
 
 #[cfg(feature = "kmeans")]
 use crate::{kmeans::Centroids, KmeansOptions};
 #[cfg(feature = "colorspaces")]
-use crate::{ColorSlice, FloatBinner};
+use crate::{wu::FloatBinner, ColorSlice};
 
 #[cfg(feature = "colorspaces")]
 use ::palette::{IntoColor, LinSrgb, Srgb};

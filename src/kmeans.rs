@@ -36,7 +36,7 @@
 
 use crate::{
     AboveMaxLen, ColorComponents, ColorCounts, ColorCountsRemap, PaletteSize, QuantizeOutput,
-    MAX_COLORS, MAX_K,
+    MAX_COLORS,
 };
 
 #[cfg(feature = "threads")]
@@ -76,7 +76,7 @@ impl<Color> Centroids<Color> {
     /// Creates a new [`Centroids`] by truncating the given `Vec` of colors to a max length of [`MAX_COLORS`].
     #[must_use]
     pub fn from_truncated(mut centroids: Vec<Color>) -> Self {
-        centroids.truncate(MAX_K);
+        centroids.truncate(MAX_COLORS.into());
         Self(centroids)
     }
 
@@ -118,7 +118,7 @@ impl<Color> TryFrom<Vec<Color>> for Centroids<Color> {
     type Error = AboveMaxLen<u16>;
 
     fn try_from(colors: Vec<Color>) -> Result<Self, Self::Error> {
-        if colors.len() <= MAX_K {
+        if colors.len() <= usize::from(MAX_COLORS) {
             Ok(Self(colors))
         } else {
             Err(AboveMaxLen(MAX_COLORS))
