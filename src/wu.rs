@@ -765,7 +765,7 @@ impl<const B: usize> Binner3<u16, B> for UIntBinner<B> {
     fn bin(&self, components: [u16; N]) -> [u8; N] {
         assert!(B.is_power_of_two());
         let bits: u32 = B.ilog2();
-        assert!((u8::BITS..=u16::BITS).contains(&bits));
+        assert!(bits <= u16::BITS);
         #[allow(clippy::cast_possible_truncation)]
         components.map(|c| (c >> (u16::BITS - bits)) as u8)
     }
@@ -815,5 +815,210 @@ where
         }
 
         index
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use palette::Srgb;
+
+    use super::*;
+
+    use crate::{tests::*, ColorSlice};
+
+    fn assert_indices_count(output: &QuantizeOutput<Srgb<u8>>) {
+        let mut counts = vec![0; output.palette.len()];
+        for &i in &output.indices {
+            counts[usize::from(i)] += 1;
+        }
+        assert_eq!(counts, output.counts);
+    }
+
+    #[test]
+    fn empty_input() {
+        let expected = QuantizeOutput::default();
+
+        let colors = ColorSlice::<Srgb<u8>>::new_unchecked(&[]);
+        let palette_size = PaletteSize::MAX;
+        let binner = UIntBinner::<32>;
+
+        let actual = palette(&colors, palette_size, &binner);
+        assert_output_eq(&actual, &expected);
+
+        let actual = indexed_palette(&colors, palette_size, &binner);
+        assert_output_eq(&actual, &expected);
+
+        #[cfg(feature = "threads")]
+        {
+            let actual = palette_par(&colors, palette_size, &binner);
+            assert_output_eq(&actual, &expected);
+
+            let actual = indexed_palette_par(&colors, palette_size, &binner);
+            assert_output_eq(&actual, &expected);
+        }
+    }
+
+    #[test]
+    fn not_enough_colors() {
+        let len = 64;
+        let colors = &test_data_1024()[..len];
+        let colors = ColorSlice::try_from(colors).unwrap();
+        let palette_size = PaletteSize::MAX;
+        let binner = UIntBinner::<32>;
+
+        let result = palette(&colors, palette_size, &binner);
+        assert_eq!(len, result.palette.len());
+        assert_eq!(result.counts.into_iter().sum::<u32>(), colors.num_colors());
+
+        let result = indexed_palette(&colors, palette_size, &binner);
+        assert_eq!(len, result.palette.len());
+        assert_indices_count(&result);
+        assert_eq!(result.counts.into_iter().sum::<u32>(), colors.num_colors());
+
+        #[cfg(feature = "threads")]
+        {
+            let result = palette_par(&colors, palette_size, &binner);
+            assert_eq!(len, result.palette.len());
+            assert_eq!(result.counts.into_iter().sum::<u32>(), colors.num_colors());
+
+            let result = indexed_palette_par(&colors, palette_size, &binner);
+            assert_eq!(len, result.palette.len());
+            assert_indices_count(&result);
+            assert_eq!(result.counts.into_iter().sum::<u32>(), colors.num_colors());
+        }
+    }
+
+    #[test]
+    fn exact_match_image_unaffected() {
+        const COUNT: u32 = 4;
+
+        fn reorder_output(mut output: QuantizeOutput<Srgb<u8>>) -> QuantizeOutput<Srgb<u8>> {
+            let mut palette_reorder = output
+                .palette
+                .iter()
+                .copied()
+                .enumerate()
+                .collect::<Vec<_>>();
+
+            palette_reorder.sort_by_key(|(_, srgb)| srgb.into_components());
+            let (reorder, palette): (Vec<_>, Vec<_>) = palette_reorder.into_iter().unzip();
+
+            output.palette = palette;
+
+            let mut remap = vec![0; output.palette.len()];
+            for (new_index, old_index) in reorder.into_iter().enumerate() {
+                remap[old_index] = new_index;
+            }
+
+            #[allow(clippy::cast_possible_truncation)]
+            for i in &mut output.indices {
+                *i = remap[usize::from(*i)] as u8;
+            }
+
+            output
+        }
+
+        let expected_palette = {
+            let mut palette = test_data_256();
+            palette.sort_by_key(|srgb| srgb.into_components());
+            palette
+        };
+
+        let indices = {
+            #[allow(clippy::cast_possible_truncation)]
+            let indices = (0..expected_palette.len())
+                .map(|i| i as u8)
+                .collect::<Vec<_>>();
+            let mut indices = [indices.as_slice(); COUNT as usize].concat();
+            indices.rotate_right(7);
+            indices
+        };
+
+        let colors = indices
+            .iter()
+            .map(|&i| expected_palette[usize::from(i)])
+            .collect::<Vec<_>>();
+
+        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
+        let palette_size = PaletteSize::MAX;
+        let binner = UIntBinner::<32>;
+
+        let actual = {
+            let mut result = palette(colors, palette_size, &binner);
+            result.palette.sort_by_key(|srgb| srgb.into_components());
+            result
+        };
+        let expected = QuantizeOutput {
+            palette: expected_palette.clone(),
+            counts: vec![COUNT; expected_palette.len()],
+            indices: Vec::new(),
+        };
+        assert_output_eq(&actual, &expected);
+        assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
+
+        let actual = reorder_output(indexed_palette(colors, palette_size, &binner));
+        let expected = QuantizeOutput { indices: indices.clone(), ..expected };
+        assert_output_eq(&actual, &expected);
+        assert_indices_count(&actual);
+        assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
+
+        #[cfg(feature = "threads")]
+        {
+            let actual = {
+                let mut result = palette_par(colors, palette_size, &binner);
+                result.palette.sort_by_key(|srgb| srgb.into_components());
+                result
+            };
+            let expected = QuantizeOutput {
+                palette: expected_palette.clone(),
+                counts: vec![COUNT; expected_palette.len()],
+                indices: Vec::new(),
+            };
+            assert_output_eq(&actual, &expected);
+            assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
+
+            let actual = reorder_output(indexed_palette_par(colors, palette_size, &binner));
+            let expected = QuantizeOutput { indices, ..expected };
+            assert_output_eq(&actual, &expected);
+            assert_indices_count(&actual);
+            assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "threads")]
+    fn single_and_multi_threaded_match() {
+        let colors = test_data_1024();
+        let colors = ColorSlice::try_from(colors.as_slice()).unwrap();
+        let palette_size = PaletteSize::MAX;
+        let binner = UIntBinner::<32>;
+
+        let wu_single = Wu3::new(&colors, &binner);
+        let wu_par = Wu3::new_par(&colors, &binner);
+
+        for (a, b) in wu_single.hist.0.iter().zip(&wu_par.hist.0) {
+            for (a, b) in a.iter().zip(b) {
+                for (a, b) in a.iter().zip(b) {
+                    assert_eq!(a.count, b.count);
+                    assert_eq!(a.components, b.components);
+                    #[allow(clippy::float_cmp)]
+                    {
+                        assert_eq!(a.sum_squared, b.sum_squared);
+                    }
+                }
+            }
+        }
+
+        let single = palette(&colors, palette_size, &binner);
+        let par = palette_par(&colors, palette_size, &binner);
+        assert_output_eq(&single, &par);
+        assert_eq!(single.counts.into_iter().sum::<u32>(), colors.num_colors());
+
+        let single = indexed_palette(&colors, palette_size, &binner);
+        let par = indexed_palette_par(&colors, palette_size, &binner);
+        assert_output_eq(&single, &par);
+        assert_indices_count(&single);
+        assert_eq!(single.counts.into_iter().sum::<u32>(), colors.num_colors());
     }
 }
