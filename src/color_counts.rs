@@ -42,7 +42,8 @@ where
     /// For deduplicated pixels like [`UniqueColorCounts`],
     /// each count indicates the number times each unique color was present in the original color slice.
     ///
-    /// The length of the returned slice (if any) must have the same length as the slice returned by `colors`.
+    /// Each count must be nonzero, and the length of the returned slice (if any)
+    /// must have the same length as the slice returned by `colors`.
     /// As such, the length of this slice must also not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
     fn counts(&self) -> Option<&[u32]>;
 
@@ -71,7 +72,7 @@ where
 
     /// Whether or not the slice returned by `colors` is empty.
     fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.colors().is_empty()
     }
 }
 
@@ -1080,5 +1081,251 @@ where
         image
             .try_into()
             .map(|slice| Self::new_par(slice, convert_color))
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    use crate::tests::*;
+
+    use palette::Srgb;
+    use rand::{seq::SliceRandom, SeedableRng};
+    use rand_xoshiro::Xoroshiro128PlusPlus;
+
+    fn assert_valid_unique(
+        unique: &UniqueColorCounts<Srgb<u8>, u8, 3>,
+        colors: ColorSlice<Srgb<u8>>,
+    ) {
+        assert_eq!(unique.total_count(), colors.num_colors());
+
+        let unique = unique.colors();
+        for i in 1..unique.len() {
+            assert!(unique[i - 1].into_components() < unique[i].into_components());
+        }
+    }
+
+    fn assert_valid_indexed(
+        indexed: &IndexedColorCounts<Srgb<u8>, u8, 3>,
+        colors: ColorSlice<Srgb<u8>>,
+    ) {
+        assert_eq!(indexed.total_count(), colors.num_colors());
+
+        let indexed_colors = indexed.colors();
+        let mut counts = vec![0; indexed.len()];
+        for (&i, &color) in indexed.indices().iter().zip(colors.as_ref()) {
+            let i = i as usize;
+            assert_eq!(indexed_colors[i], color);
+            counts[i] += 1;
+        }
+        assert_eq!(counts, indexed.counts());
+
+        for i in 1..indexed_colors.len() {
+            assert!(indexed_colors[i - 1].into_components() < indexed_colors[i].into_components());
+        }
+    }
+
+    fn assert_unique_eq(
+        actual: &UniqueColorCounts<Srgb<u8>, u8, 3>,
+        expected: &UniqueColorCounts<Srgb<u8>, u8, 3>,
+    ) {
+        assert_eq!(actual.colors(), expected.colors());
+        assert_eq!(actual.counts(), expected.counts());
+    }
+
+    fn assert_indexed_eq(
+        actual: &IndexedColorCounts<Srgb<u8>, u8, 3>,
+        expected: &IndexedColorCounts<Srgb<u8>, u8, 3>,
+    ) {
+        assert_eq!(actual.colors(), expected.colors());
+        assert_eq!(actual.counts(), expected.counts());
+        assert_eq!(actual.indices(), expected.indices());
+    }
+
+    #[test]
+    fn empty_input() {
+        let empty_input = ColorSlice::<Srgb<u8>>::new_unchecked(&[]);
+
+        let unique = UniqueColorCounts::new(empty_input, |srgb| srgb);
+        assert!(unique.is_empty() && unique.colors().is_empty() && unique.counts().is_empty());
+        assert_eq!(unique.total_count(), 0);
+
+        let indexed = IndexedColorCounts::new(empty_input, |srgb| srgb);
+        assert!(
+            indexed.is_empty()
+                && indexed.colors().is_empty()
+                && indexed.counts().is_empty()
+                && indexed.indices().is_empty()
+        );
+        assert_eq!(indexed.total_count(), 0);
+
+        #[cfg(feature = "threads")]
+        {
+            let unique = UniqueColorCounts::new_par(empty_input, |srgb| srgb);
+            assert!(unique.is_empty() && unique.colors().is_empty() && unique.counts().is_empty());
+            assert_eq!(unique.total_count(), 0);
+
+            let indexed = IndexedColorCounts::new_par(empty_input, |srgb| srgb);
+            assert!(
+                indexed.is_empty()
+                    && indexed.colors().is_empty()
+                    && indexed.counts().is_empty()
+                    && indexed.indices().is_empty()
+            );
+            assert_eq!(indexed.total_count(), 0);
+        }
+    }
+
+    fn add_duplicate_color_with_data(colors: Vec<Srgb<u8>>) {
+        fn index_of(colors: &[Srgb<u8>], color: Srgb<u8>) -> usize {
+            colors.iter().position(|&c| c == color).unwrap()
+        }
+
+        let colors = {
+            let mut colors = colors;
+            let len = colors.len();
+            colors[len - 1] = colors[0];
+            colors
+        };
+
+        let duplicate = colors[0];
+        let without_duplicate = ColorSlice::try_from(&colors[..(colors.len() - 1)]).unwrap();
+        let with_duplicate = ColorSlice::try_from(colors.as_slice()).unwrap();
+
+        let expected = {
+            let mut unique = UniqueColorCounts::new(without_duplicate, |srgb| srgb);
+            let i = index_of(unique.colors(), duplicate);
+            unique.counts[i] += 1;
+            unique
+        };
+        let actual = UniqueColorCounts::new(with_duplicate, |srgb| srgb);
+        assert_valid_unique(&actual, with_duplicate);
+        assert_unique_eq(&actual, &expected);
+
+        let expected = {
+            let mut indexed = IndexedColorCounts::new(without_duplicate, |srgb| srgb);
+            let i = index_of(indexed.colors(), duplicate);
+            indexed.counts[i] += 1;
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                indexed.indices.push(i as u32);
+            }
+            indexed
+        };
+        let actual = IndexedColorCounts::new(with_duplicate, |srgb| srgb);
+        assert_valid_indexed(&actual, with_duplicate);
+        assert_indexed_eq(&actual, &expected);
+
+        #[cfg(feature = "threads")]
+        {
+            let expected = {
+                let mut unique = UniqueColorCounts::new_par(without_duplicate, |srgb| srgb);
+                let i = index_of(unique.colors(), duplicate);
+                unique.counts[i] += 1;
+                unique
+            };
+            let actual = UniqueColorCounts::new_par(with_duplicate, |srgb| srgb);
+            assert_valid_unique(&actual, with_duplicate);
+            assert_unique_eq(&actual, &expected);
+
+            let expected = {
+                let mut indexed = IndexedColorCounts::new_par(without_duplicate, |srgb| srgb);
+                let i = index_of(indexed.colors(), duplicate);
+                indexed.counts[i] += 1;
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    indexed.indices.push(i as u32);
+                }
+                indexed
+            };
+            let actual = IndexedColorCounts::new_par(with_duplicate, |srgb| srgb);
+            assert_valid_indexed(&actual, with_duplicate);
+            assert_indexed_eq(&actual, &expected);
+        }
+    }
+
+    #[test]
+    fn add_duplicate_color() {
+        let colors = test_data_1024();
+        add_duplicate_color_with_data(colors.clone());
+
+        // for testing non-bitvec branches
+        add_duplicate_color_with_data([colors.as_slice(); 256].concat());
+    }
+
+    fn reordered_input_with_data(colors: &[Srgb<u8>]) {
+        let mut reordered = colors.to_vec();
+        let reordered = {
+            let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+            reordered.shuffle(&mut rng);
+            ColorSlice::try_from(reordered.as_slice()).unwrap()
+        };
+
+        let colors = ColorSlice::try_from(colors).unwrap();
+
+        let expected = UniqueColorCounts::new(colors, |srgb| srgb);
+        let actual = UniqueColorCounts::new(reordered, |srgb| srgb);
+        assert_valid_unique(&actual, reordered);
+        assert_unique_eq(&actual, &expected);
+
+        let expected = IndexedColorCounts::new(colors, |srgb| srgb);
+        let actual = IndexedColorCounts::new(reordered, |srgb| srgb);
+        assert_valid_indexed(&actual, reordered);
+        assert_eq!(actual.colors(), expected.colors());
+        assert_eq!(actual.counts(), expected.counts());
+        assert_eq!(actual.indices().len(), expected.indices.len());
+
+        #[cfg(feature = "threads")]
+        {
+            let expected = UniqueColorCounts::new_par(colors, |srgb| srgb);
+            let actual = UniqueColorCounts::new_par(reordered, |srgb| srgb);
+            assert_valid_unique(&actual, reordered);
+            assert_unique_eq(&actual, &expected);
+
+            let expected = IndexedColorCounts::new_par(colors, |srgb| srgb);
+            let actual = IndexedColorCounts::new_par(reordered, |srgb| srgb);
+            assert_valid_indexed(&actual, reordered);
+            assert_eq!(actual.colors(), expected.colors());
+            assert_eq!(actual.counts(), expected.counts());
+            assert_eq!(actual.indices().len(), expected.indices.len());
+        }
+    }
+
+    #[test]
+    fn reordered_input() {
+        let colors = test_data_1024();
+        reordered_input_with_data(&colors);
+
+        // for testing non-bitvec branches
+        let colors = [colors.as_slice(); 256].concat();
+        reordered_input_with_data(&colors);
+    }
+
+    #[cfg(feature = "threads")]
+    fn single_and_multi_threaded_match_with_data(colors: &[Srgb<u8>]) {
+        let colors = ColorSlice::try_from(colors).unwrap();
+
+        let single = UniqueColorCounts::new(colors, |srgb| srgb);
+        let par = UniqueColorCounts::new_par(colors, |srgb| srgb);
+        assert_valid_unique(&single, colors);
+        assert_unique_eq(&single, &par);
+
+        let single = IndexedColorCounts::new(colors, |srgb| srgb);
+        let par = IndexedColorCounts::new_par(colors, |srgb| srgb);
+        assert_valid_indexed(&single, colors);
+        assert_indexed_eq(&single, &par);
+    }
+
+    #[test]
+    #[cfg(feature = "threads")]
+    fn single_and_multi_threaded_match() {
+        let colors = test_data_1024();
+        single_and_multi_threaded_match_with_data(&colors);
+
+        // for testing non-bitvec branches
+        let colors = [colors.as_slice(); 256].concat();
+        single_and_multi_threaded_match_with_data(&colors);
     }
 }
