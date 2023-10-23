@@ -244,25 +244,39 @@ impl FloydSteinberg {
                 *d = original_colors[s as usize].map(Into::into);
             }
 
-            for (x, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate() {
-                let mut point = point;
-                let err = error1[x + 1];
-                for i in 0..N {
-                    point[i] += err[i];
-                }
+            if row % 2 == 0 {
+                for (x, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate() {
+                    let mut point = point;
+                    let err = error1[x + 1];
+                    for i in 0..N {
+                        point[i] += err[i];
+                    }
 
-                let (nearest_index, nearest_point) =
-                    nearest_neighbor(*index, point, &palette, &distances, &components);
+                    let (nearest_index, nearest_point) =
+                        nearest_neighbor(*index, point, &palette, &distances, &components);
 
-                *index = nearest_index;
-                let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+                    *index = nearest_index;
+                    let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
 
-                if row % 2 == 0 {
                     arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
                     arr_mul_assign(&mut error2[x + 2], 1.0 / 16.0, &err);
-                } else {
+                }
+            } else {
+                for (x, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate().rev() {
+                    let mut point = point;
+                    let err = error1[x + 1];
+                    for i in 0..N {
+                        point[i] += err[i];
+                    }
+
+                    let (nearest_index, nearest_point) =
+                        nearest_neighbor(*index, point, &palette, &distances, &components);
+
+                    *index = nearest_index;
+                    let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
                     arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
@@ -312,25 +326,39 @@ impl FloydSteinberg {
             .zip(original_colors.as_arrays().chunks_exact(width))
             .enumerate()
         {
-            for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
-                let mut point = og.map(Into::into);
-                let err = error1[x + 1];
-                for i in 0..N {
-                    point[i] += err[i];
-                }
+            if row % 2 == 0 {
+                for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
+                    let mut point = og.map(Into::into);
+                    let err = error1[x + 1];
+                    for i in 0..N {
+                        point[i] += err[i];
+                    }
 
-                let (nearest_index, nearest_point) =
-                    nearest_neighbor(*index, point, &palette, &distances, &components);
+                    let (nearest_index, nearest_point) =
+                        nearest_neighbor(*index, point, &palette, &distances, &components);
 
-                *index = nearest_index;
-                let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+                    *index = nearest_index;
+                    let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
 
-                if row % 2 == 0 {
                     arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
                     arr_mul_assign(&mut error2[x + 2], 1.0 / 16.0, &err);
-                } else {
+                }
+            } else {
+                for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
+                    let mut point = og.map(Into::into);
+                    let err = error1[x + 1];
+                    for i in 0..N {
+                        point[i] += err[i];
+                    }
+
+                    let (nearest_index, nearest_point) =
+                        nearest_neighbor(*index, point, &palette, &distances, &components);
+
+                    *index = nearest_index;
+                    let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
                     arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
                     arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
