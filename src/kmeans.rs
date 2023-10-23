@@ -590,19 +590,8 @@ mod tests {
 
     use crate::{tests::*, ColorSlice};
 
-    use std::fmt::Debug;
-
     use ordered_float::OrderedFloat;
     use palette::Srgb;
-
-    fn assert_output_eq<Color: Debug + PartialEq>(
-        actual: &QuantizeOutput<Color>,
-        expected: &QuantizeOutput<Color>,
-    ) {
-        assert_eq!(actual.palette, expected.palette);
-        assert_eq!(actual.counts, expected.counts);
-        assert_eq!(actual.indices, expected.indices);
-    }
 
     fn test_centroids() -> Centroids<Srgb<u8>> {
         let mut centroids = test_data_256();
@@ -629,6 +618,31 @@ mod tests {
             &indexed_palette(empty_colors, num_samples, centroids.clone(), seed),
             &empty_output,
         );
+        #[cfg(feature = "threads")]
+        {
+            let batch_size = 64;
+
+            assert_output_eq(
+                &palette_par(
+                    empty_colors,
+                    num_samples,
+                    batch_size,
+                    centroids.clone(),
+                    seed,
+                ),
+                &empty_output,
+            );
+            assert_output_eq(
+                &indexed_palette_par(
+                    empty_colors,
+                    num_samples,
+                    batch_size,
+                    centroids.clone(),
+                    seed,
+                ),
+                &empty_output,
+            );
+        }
 
         let empty_centroids = Centroids::new_unchecked(Vec::new());
         assert_output_eq(
@@ -639,63 +653,31 @@ mod tests {
             &indexed_palette(colors, num_samples, empty_centroids.clone(), seed),
             &empty_output,
         );
-    }
+        #[cfg(feature = "threads")]
+        {
+            let batch_size = 64;
 
-    #[test]
-    #[cfg(feature = "threads")]
-    fn empty_inputs_par() {
-        let colors = test_data_1024();
-        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
-        let num_samples = 505;
-        let centroids = test_centroids();
-        let seed = 0;
-        let batch_size = 64;
-
-        let empty_output = QuantizeOutput::default();
-
-        let empty_colors = &ColorSlice::new_unchecked(&[]);
-        assert_output_eq(
-            &palette_par(
-                empty_colors,
-                num_samples,
-                batch_size,
-                centroids.clone(),
-                seed,
-            ),
-            &empty_output,
-        );
-        assert_output_eq(
-            &indexed_palette_par(
-                empty_colors,
-                num_samples,
-                batch_size,
-                centroids.clone(),
-                seed,
-            ),
-            &empty_output,
-        );
-
-        let empty_centroids = Centroids::new_unchecked(Vec::new());
-        assert_output_eq(
-            &palette_par(
-                colors,
-                num_samples,
-                batch_size,
-                empty_centroids.clone(),
-                seed,
-            ),
-            &empty_output,
-        );
-        assert_output_eq(
-            &indexed_palette_par(
-                colors,
-                num_samples,
-                batch_size,
-                empty_centroids.clone(),
-                seed,
-            ),
-            &empty_output,
-        );
+            assert_output_eq(
+                &palette_par(
+                    colors,
+                    num_samples,
+                    batch_size,
+                    empty_centroids.clone(),
+                    seed,
+                ),
+                &empty_output,
+            );
+            assert_output_eq(
+                &indexed_palette_par(
+                    colors,
+                    num_samples,
+                    batch_size,
+                    empty_centroids.clone(),
+                    seed,
+                ),
+                &empty_output,
+            );
+        }
     }
 
     #[test]
@@ -716,50 +698,40 @@ mod tests {
 
         let actual = indexed_palette(colors, num_samples, centroids.clone(), seed);
         assert_eq!(actual.indices.len(), colors.len());
-        let expected = QuantizeOutput {
-            indices: actual.indices.clone(),
-            ..expected
-        };
-        assert_output_eq(&actual, &expected);
-    }
-
-    #[test]
-    #[cfg(feature = "threads")]
-    fn no_samples_gives_initial_centroids_par() {
-        let colors = test_data_1024();
-        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
-        let centroids = test_centroids();
-        let seed = 0;
-
-        let expected = QuantizeOutput {
-            palette: centroids.to_vec(),
-            counts: vec![0; centroids.len()],
-            indices: Vec::new(),
-        };
-
-        let num_samples = 0;
-        let batch_size = 64;
-        let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
-        assert_output_eq(&actual, &expected);
-        let actual = indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
-        assert_eq!(actual.indices.len(), colors.len());
         let expected_indexed = QuantizeOutput {
             indices: actual.indices.clone(),
             ..expected.clone()
         };
         assert_output_eq(&actual, &expected_indexed);
 
-        let num_samples = 505;
-        let batch_size = 0;
-        let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
-        assert_output_eq(&actual, &expected);
-        let actual = indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
-        assert_eq!(actual.indices.len(), colors.len());
-        let expected_indexed = QuantizeOutput {
-            indices: actual.indices.clone(),
-            ..expected.clone()
-        };
-        assert_output_eq(&actual, &expected_indexed);
+        #[cfg(feature = "threads")]
+        {
+            let num_samples = 0;
+            let batch_size = 64;
+            let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+            assert_output_eq(&actual, &expected);
+            let actual =
+                indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+            assert_eq!(actual.indices.len(), colors.len());
+            let expected_indexed = QuantizeOutput {
+                indices: actual.indices.clone(),
+                ..expected.clone()
+            };
+            assert_output_eq(&actual, &expected_indexed);
+
+            let num_samples = 505;
+            let batch_size = 0;
+            let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+            assert_output_eq(&actual, &expected);
+            let actual =
+                indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+            assert_eq!(actual.indices.len(), colors.len());
+            let expected_indexed = QuantizeOutput {
+                indices: actual.indices.clone(),
+                ..expected.clone()
+            };
+            assert_output_eq(&actual, &expected_indexed);
+        }
     }
 
     #[test]
@@ -795,65 +767,46 @@ mod tests {
         assert_eq!(actual.counts.into_iter().sum::<u32>(), num_samples);
 
         let actual = indexed_palette(colors, num_samples, centroids.clone(), seed);
-        assert_eq!(actual.counts.len(), expected.palette.len());
-        let expected = QuantizeOutput {
-            palette: expected.palette,
-            counts: actual.counts.clone(),
-            indices,
-        };
-        assert_output_eq(&actual, &expected);
-        assert_eq!(actual.counts.into_iter().sum::<u32>(), num_samples);
-    }
-
-    #[test]
-    #[cfg(feature = "threads")]
-    fn exact_match_image_unaffected_par() {
-        let centroids = test_centroids();
-
-        let indices = {
-            #[allow(clippy::cast_possible_truncation)]
-            let indices = (0..centroids.len()).map(|i| i as u8).collect::<Vec<_>>();
-            let mut indices = [indices.as_slice(); 4].concat();
-            indices.rotate_right(7);
-            indices
-        };
-
-        let colors = indices
-            .iter()
-            .map(|&i| centroids[usize::from(i)])
-            .collect::<Vec<_>>();
-
-        let colors = &ColorSlice::try_from(colors.as_slice()).unwrap();
-
-        let num_samples = 505;
-        let seed = 0;
-        let batch_size = 64;
-
-        let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
         assert_eq!(actual.counts.len(), centroids.len());
         let expected = QuantizeOutput {
             palette: centroids.to_vec(),
             counts: actual.counts.clone(),
-            indices: Vec::new(),
+            indices: indices.clone(),
         };
         assert_output_eq(&actual, &expected);
-        assert_eq!(
-            actual.counts.into_iter().sum::<u32>(),
-            num_samples - num_samples % batch_size
-        );
+        assert_eq!(actual.counts.into_iter().sum::<u32>(), num_samples);
 
-        let actual = indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
-        assert_eq!(actual.counts.len(), expected.palette.len());
-        let expected = QuantizeOutput {
-            palette: expected.palette,
-            counts: actual.counts.clone(),
-            indices,
-        };
-        assert_output_eq(&actual, &expected);
-        assert_eq!(
-            actual.counts.into_iter().sum::<u32>(),
-            num_samples - num_samples % batch_size
-        );
+        #[cfg(feature = "threads")]
+        {
+            let batch_size = 64;
+
+            let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+            assert_eq!(actual.counts.len(), centroids.len());
+            let expected = QuantizeOutput {
+                palette: centroids.to_vec(),
+                counts: actual.counts.clone(),
+                indices: Vec::new(),
+            };
+            assert_output_eq(&actual, &expected);
+            assert_eq!(
+                actual.counts.into_iter().sum::<u32>(),
+                num_samples - num_samples % batch_size
+            );
+
+            let actual =
+                indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
+            assert_eq!(actual.counts.len(), centroids.len());
+            let expected = QuantizeOutput {
+                palette: centroids.to_vec(),
+                counts: actual.counts.clone(),
+                indices,
+            };
+            assert_output_eq(&actual, &expected);
+            assert_eq!(
+                actual.counts.into_iter().sum::<u32>(),
+                num_samples - num_samples % batch_size
+            );
+        }
     }
 
     #[test]
