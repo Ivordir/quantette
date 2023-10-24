@@ -63,8 +63,7 @@
     clippy::module_name_repetitions,
     clippy::many_single_char_names,
     clippy::missing_panics_doc,
-    clippy::unreadable_literal,
-    clippy::wildcard_imports
+    clippy::unreadable_literal
 )]
 
 mod color_counts;
