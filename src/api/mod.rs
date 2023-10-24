@@ -8,10 +8,10 @@ pub use colorspace::ColorSpace;
 pub use image_pipeline::ImagePipeline;
 pub use palette_pipeline::PalettePipeline;
 
-use crate::{ColorComponents, ColorCounts};
-
 #[cfg(feature = "kmeans")]
-use crate::kmeans::Centroids;
+use crate::{kmeans::Centroids, ColorComponents, ColorCounts};
+
+use std::marker::PhantomData;
 
 /// A builder struct to specify the parameters for k-means.
 ///
@@ -33,10 +33,11 @@ pub struct KmeansOptions<Color> {
     /// The seed value for the random number generator.
     seed: u64,
     /// The batch size for minibatch k-means.
-    #[cfg(feature = "threads")]
+    #[allow(unused)]
     batch_size: u32,
 }
 
+#[cfg(feature = "kmeans")]
 impl<Color> Default for KmeansOptions<Color> {
     fn default() -> Self {
         Self::new()
@@ -47,12 +48,11 @@ impl<Color> Default for KmeansOptions<Color> {
 impl<Color> KmeansOptions<Color> {
     /// Creates a new [`KmeansOptions`] with default values.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             sampling_factor: 0.5,
             initial_centroids: None,
             seed: 0,
-            #[cfg(feature = "threads")]
             batch_size: 4096,
         }
     }
@@ -129,7 +129,7 @@ pub enum QuantizeMethod<Color> {
     /// This method is quick and gives good or at least decent results.
     ///
     /// See the [`wu`](crate::wu) module for more details.
-    Wu,
+    Wu(PhantomData<Color>),
     /// Color quantization using k-means clustering.
     ///
     /// This method is slower than Wu's color quantizer but gives more accurate results.

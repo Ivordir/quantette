@@ -4,39 +4,38 @@
 use super::num_samples;
 
 use crate::{
-    dither::FloydSteinberg, wu, ColorComponents, ColorCounts, ColorCountsRemap, ColorSlice,
-    ColorSpace, IndexedColorCounts, PalettePipeline, PaletteSize, QuantizeMethod,
+    dither::FloydSteinberg,
+    wu::{self, Binner3},
+    ColorComponents, ColorCounts, ColorCountsRemap, ColorSlice, ColorSpace, PalettePipeline,
+    PaletteSize, QuantizeMethod, SumPromotion, ZeroedIsZero,
 };
 
 #[cfg(all(feature = "colorspaces", feature = "threads"))]
 use crate::colorspace::convert_color_slice_par;
+#[cfg(feature = "colorspaces")]
+use crate::colorspace::{convert_color_slice, from_srgb, to_srgb};
 #[cfg(feature = "image")]
 use crate::AboveMaxLen;
 #[cfg(feature = "threads")]
 use crate::ColorCountsParallelRemap;
-#[cfg(feature = "colorspaces")]
-use crate::{
-    colorspace::{convert_color_slice, from_srgb, to_srgb},
-    wu::Binner3,
-    SumPromotion, ZeroedIsZero,
-};
+#[cfg(any(feature = "colorspaces", feature = "kmeans"))]
+use crate::IndexedColorCounts;
 #[cfg(feature = "kmeans")]
 use crate::{
     kmeans::{self, Centroids},
     KmeansOptions,
 };
 
+use num_traits::AsPrimitive;
 use palette::Srgb;
 
 #[cfg(feature = "image")]
 use image::RgbImage;
-#[cfg(feature = "colorspaces")]
-use num_traits::AsPrimitive;
 #[cfg(feature = "image")]
 use palette::cast::IntoComponents;
 #[cfg(feature = "colorspaces")]
 use palette::{Lab, Oklab};
-#[cfg(feature = "threads")]
+#[cfg(all(feature = "threads", feature = "image"))]
 use rayon::prelude::*;
 
 /// A builder struct to specify options to create a quantized image or an indexed palette from an image.
@@ -125,6 +124,7 @@ pub struct ImagePipeline<'a> {
     /// The error diffusion factor to use when dithering.
     pub(crate) dither_error_diffusion: f32,
     /// Whether or not to deduplicate the input pixels/colors.
+    #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
     pub(crate) dedup_pixels: bool,
 }
 
@@ -137,9 +137,10 @@ impl<'a> ImagePipeline<'a> {
             dimensions: (width, height),
             k: PaletteSize::default(),
             colorspace: ColorSpace::Srgb,
-            quantize_method: QuantizeMethod::Wu,
+            quantize_method: QuantizeMethod::wu(),
             dither: true,
             dither_error_diffusion: FloydSteinberg::DEFAULT_ERROR_DIFFUSION,
+            #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
             dedup_pixels: true,
         }
     }
@@ -274,6 +275,7 @@ impl<'a> ImagePipeline<'a> {
                     colors,
                     k,
                     quantize_method,
+                    #[cfg(feature = "kmeans")]
                     dedup_pixels,
                     dimensions,
                     ..
@@ -414,6 +416,7 @@ impl<'a> ImagePipeline<'a> {
                     colors,
                     k,
                     quantize_method,
+                    #[cfg(feature = "kmeans")]
                     dedup_pixels,
                     dimensions,
                     ..
@@ -539,6 +542,7 @@ impl<'a> ImagePipeline<'a> {
 }
 
 /// Computes a color palette and the indices into it.
+#[allow(clippy::needless_pass_by_value)]
 fn indexed_palette<Color, Component, const B: usize>(
     color_counts: &impl ColorCountsRemap<Color, Component, 3>,
     width: u32,
@@ -556,7 +560,7 @@ where
     f32: AsPrimitive<Component>,
 {
     let (palette, mut indices) = match method {
-        QuantizeMethod::Wu => {
+        QuantizeMethod::Wu(_) => {
             let res = wu::indexed_palette(color_counts, k, binner);
             (res.palette, res.indices)
         }
@@ -595,6 +599,7 @@ where
 
 /// Computes a color palette and the indices into it in parallel.
 #[cfg(feature = "threads")]
+#[allow(clippy::needless_pass_by_value)]
 fn indexed_palette_par<Color, Component, const B: usize>(
     color_counts: &(impl ColorCountsParallelRemap<Color, Component, 3> + Send + Sync),
     width: u32,
@@ -612,7 +617,7 @@ where
     f32: AsPrimitive<Component>,
 {
     let (palette, mut indices) = match method {
-        QuantizeMethod::Wu => {
+        QuantizeMethod::Wu(_) => {
             let res = wu::indexed_palette_par(color_counts, k, binner);
             (res.palette, res.indices)
         }

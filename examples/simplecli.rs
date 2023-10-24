@@ -162,7 +162,7 @@ fn main() {
                         .seed(seed),
                 )
             } else {
-                QuantizeMethod::Wu
+                QuantizeMethod::wu()
             };
 
             let colorspace = colorspace.into();

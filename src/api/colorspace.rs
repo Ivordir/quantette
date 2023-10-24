@@ -5,10 +5,14 @@ use crate::{
     QuantizeMethod,
 };
 
+#[cfg(all(feature = "kmeans", feature = "colorspaces"))]
+use crate::kmeans::Centroids;
 #[cfg(feature = "kmeans")]
-use crate::{kmeans::Centroids, KmeansOptions};
+use crate::KmeansOptions;
 #[cfg(feature = "colorspaces")]
 use crate::{wu::FloatBinner, ColorSlice};
+
+use std::marker::PhantomData;
 
 #[cfg(feature = "colorspaces")]
 use ::palette::{IntoColor, LinSrgb, Srgb};
@@ -149,18 +153,18 @@ where
 #[cfg(feature = "colorspaces")]
 impl QuantizeMethod<Srgb<u8>> {
     /// Convert the colorspace
+    #[allow(unused_variables)]
     pub(crate) fn convert_color_space_from_srgb<Color>(
         self,
         convert_to: impl Fn(Srgb<u8>) -> Color,
     ) -> QuantizeMethod<Color> {
         match self {
-            QuantizeMethod::Wu => QuantizeMethod::Wu,
+            QuantizeMethod::Wu(_) => QuantizeMethod::Wu(PhantomData),
             #[cfg(feature = "kmeans")]
             QuantizeMethod::Kmeans(KmeansOptions {
                 sampling_factor,
                 initial_centroids,
                 seed,
-                #[cfg(feature = "threads")]
                 batch_size,
             }) => QuantizeMethod::Kmeans(KmeansOptions {
                 initial_centroids: initial_centroids.map(|c| {
@@ -168,9 +172,23 @@ impl QuantizeMethod<Srgb<u8>> {
                 }),
                 sampling_factor,
                 seed,
-                #[cfg(feature = "threads")]
                 batch_size,
             }),
         }
+    }
+}
+
+impl<Color> QuantizeMethod<Color> {
+    /// Creates a new [`QuantizeMethod::Wu`].
+    #[must_use]
+    pub const fn wu() -> Self {
+        Self::Wu(PhantomData)
+    }
+
+    /// Creates a new [`QuantizeMethod::Kmeans`] with the default [`KmeansOptions`].
+    #[must_use]
+    #[cfg(feature = "kmeans")]
+    pub const fn kmeans() -> Self {
+        Self::Kmeans(KmeansOptions::new())
     }
 }

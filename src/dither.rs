@@ -18,8 +18,8 @@ impl FloydSteinberg {
 
     /// Creates a new [`FloydSteinberg`] with the default error diffusion factor.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self(Self::DEFAULT_ERROR_DIFFUSION)
     }
 
     /// Creates a new [`FloydSteinberg`] with the given error diffusion factor.
@@ -46,7 +46,7 @@ impl FloydSteinberg {
 
 impl Default for FloydSteinberg {
     fn default() -> Self {
-        Self(Self::DEFAULT_ERROR_DIFFUSION)
+        Self::new()
     }
 }
 

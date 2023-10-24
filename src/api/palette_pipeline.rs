@@ -4,32 +4,30 @@
 use super::num_samples;
 
 use crate::{
-    wu, ColorComponents, ColorCounts, ColorSlice, ColorSpace, ImagePipeline, PaletteSize,
-    QuantizeMethod, UniqueColorCounts,
+    wu::{self, Binner3},
+    ColorComponents, ColorCounts, ColorSlice, ColorSpace, ImagePipeline, PaletteSize,
+    QuantizeMethod, SumPromotion, ZeroedIsZero,
 };
 
 #[cfg(all(feature = "colorspaces", feature = "threads"))]
 use crate::colorspace::convert_color_slice_par;
+#[cfg(feature = "colorspaces")]
+use crate::colorspace::{convert_color_slice, from_srgb, to_srgb};
 #[cfg(feature = "image")]
 use crate::AboveMaxLen;
-#[cfg(feature = "colorspaces")]
-use crate::{
-    colorspace::{convert_color_slice, from_srgb, to_srgb},
-    wu::Binner3,
-    SumPromotion, ZeroedIsZero,
-};
+#[cfg(any(feature = "colorspaces", feature = "kmeans"))]
+use crate::UniqueColorCounts;
 #[cfg(feature = "kmeans")]
 use crate::{
     kmeans::{self, Centroids},
     KmeansOptions,
 };
 
+use num_traits::AsPrimitive;
 use palette::Srgb;
 
 #[cfg(feature = "image")]
 use image::RgbImage;
-#[cfg(feature = "colorspaces")]
-use num_traits::AsPrimitive;
 #[cfg(feature = "colorspaces")]
 use palette::{Lab, Oklab};
 
@@ -132,6 +130,7 @@ pub struct PalettePipeline<'a> {
     /// The color quantization method to use.
     pub(crate) quantize_method: QuantizeMethod<Srgb<u8>>,
     /// Whether or not to deduplicate the input pixels/colors.
+    #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
     pub(crate) dedup_pixels: bool,
 }
 
@@ -143,7 +142,8 @@ impl<'a> PalettePipeline<'a> {
             colors,
             k: PaletteSize::default(),
             colorspace: ColorSpace::Srgb,
-            quantize_method: QuantizeMethod::Wu,
+            quantize_method: QuantizeMethod::wu(),
+            #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
             dedup_pixels: true,
         }
     }
@@ -214,6 +214,7 @@ impl<'a> From<ImagePipeline<'a>> for PalettePipeline<'a> {
             k,
             colorspace,
             quantize_method,
+            #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
             dedup_pixels,
             ..
         } = value;
@@ -223,6 +224,7 @@ impl<'a> From<ImagePipeline<'a>> for PalettePipeline<'a> {
             k,
             colorspace,
             quantize_method,
+            #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
             dedup_pixels,
         }
     }
@@ -235,7 +237,12 @@ impl<'a> PalettePipeline<'a> {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let Self {
-                    colors, k, quantize_method, dedup_pixels, ..
+                    colors,
+                    k,
+                    quantize_method,
+                    #[cfg(feature = "kmeans")]
+                    dedup_pixels,
+                    ..
                 } = self;
 
                 match quantize_method {
@@ -315,7 +322,12 @@ impl<'a> PalettePipeline<'a> {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let Self {
-                    colors, k, quantize_method, dedup_pixels, ..
+                    colors,
+                    k,
+                    quantize_method,
+                    #[cfg(feature = "kmeans")]
+                    dedup_pixels,
+                    ..
                 } = self;
 
                 match quantize_method {
@@ -390,6 +402,7 @@ impl<'a> PalettePipeline<'a> {
 }
 
 /// Computes a color palette.
+#[allow(clippy::needless_pass_by_value)]
 fn palette<Color, Component, const B: usize>(
     color_counts: &impl ColorCounts<Color, Component, 3>,
     k: PaletteSize,
@@ -404,7 +417,7 @@ where
     f32: AsPrimitive<Component>,
 {
     match method {
-        QuantizeMethod::Wu => wu::palette(color_counts, k, binner).palette,
+        QuantizeMethod::Wu(_) => wu::palette(color_counts, k, binner).palette,
         #[cfg(feature = "kmeans")]
         QuantizeMethod::Kmeans(KmeansOptions {
             sampling_factor, initial_centroids, seed, ..
@@ -422,6 +435,7 @@ where
 
 /// Computes a color palette in parallel.
 #[cfg(feature = "threads")]
+#[allow(clippy::needless_pass_by_value)]
 fn palette_par<Color, Component, const B: usize>(
     color_counts: &(impl ColorCounts<Color, Component, 3> + Send + Sync),
     k: PaletteSize,
@@ -436,7 +450,7 @@ where
     f32: AsPrimitive<Component>,
 {
     match method {
-        QuantizeMethod::Wu => wu::palette_par(color_counts, k, binner).palette,
+        QuantizeMethod::Wu(_) => wu::palette_par(color_counts, k, binner).palette,
         #[cfg(feature = "kmeans")]
         QuantizeMethod::Kmeans(KmeansOptions {
             sampling_factor,

@@ -12,7 +12,7 @@ use palette::cast::{self, AsArrays};
 
 #[cfg(feature = "image")]
 use image::RgbImage;
-#[cfg(any(feature = "image", feature = "colorspaces"))]
+#[cfg(feature = "image")]
 use palette::Srgb;
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
