@@ -656,8 +656,17 @@ where
 mod sync_unsafe {
     use std::{cell::UnsafeCell, ops::Range};
 
+    #[cfg(test)]
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     /// Unsafely share a mutable slice across multiple threads.
-    pub struct SyncUnsafeSlice<'a, T>(UnsafeCell<&'a mut [T]>);
+    pub struct SyncUnsafeSlice<'a, T> {
+        /// The inner [`UnsafeCell`] containing the mutable slice.
+        cell: UnsafeCell<&'a mut [T]>,
+        /// Check each index is written to only once during tests.
+        #[cfg(test)]
+        written: Vec<AtomicBool>,
+    }
 
     unsafe impl<'a, T: Send + Sync> Send for SyncUnsafeSlice<'a, T> {}
     unsafe impl<'a, T: Send + Sync> Sync for SyncUnsafeSlice<'a, T> {}
@@ -665,12 +674,16 @@ mod sync_unsafe {
     impl<'a, T> SyncUnsafeSlice<'a, T> {
         /// Creates a new [`SyncUnsafeSlice`] with the given slice.
         pub fn new(slice: &'a mut [T]) -> Self {
-            Self(UnsafeCell::new(slice))
+            Self {
+                #[cfg(test)]
+                written: slice.iter().map(|_| AtomicBool::new(false)).collect(),
+                cell: UnsafeCell::new(slice),
+            }
         }
 
         /// Unsafely get the inner mutable reference.
         unsafe fn get(&self) -> &'a mut [T] {
-            unsafe { *self.0.get() }
+            unsafe { *self.cell.get() }
         }
 
         /// Unsafely write the given value to the given index in the slice.
@@ -679,6 +692,10 @@ mod sync_unsafe {
         /// It is undefined behaviour if two threads write to the same index without synchronization.
         #[inline]
         pub unsafe fn write(&self, index: usize, value: T) {
+            #[cfg(test)]
+            {
+                assert!(!self.written[index].swap(true, Ordering::SeqCst));
+            }
             unsafe { self.get()[index] = value };
         }
     }
@@ -690,6 +707,12 @@ mod sync_unsafe {
         /// It is undefined behaviour if two threads write to the same range/indices without synchronization.
         #[inline]
         pub unsafe fn write_slice(&self, range: Range<usize>, slice: &[T]) {
+            #[cfg(test)]
+            {
+                assert!(!self.written[range.clone()]
+                    .iter()
+                    .any(|b| b.swap(true, Ordering::SeqCst)));
+            }
             unsafe { self.get()[range].copy_from_slice(slice) };
         }
     }
