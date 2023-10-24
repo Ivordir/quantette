@@ -41,7 +41,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo doc --no-deps
         env:
-          RUSTDOCFLAGS: "--deny warnings"
+          RUSTDOCFLAGS: --deny warnings
 
   typos:
     name: Typos
