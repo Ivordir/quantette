@@ -774,7 +774,7 @@ where
                 prefix
             };
 
-            let mut green_blue = vec![[0, 2]; pixels.len()];
+            let mut green_blue = vec![[0; 2]; pixels.len()];
             {
                 let green_blue = SyncUnsafeSlice::new(&mut green_blue);
 

@@ -70,7 +70,7 @@ impl<'a, Color> ColorSlice<'a, Color> {
     /// Creates a [`ColorSlice`] without ensuring that its length
     /// is less than or equal to [`MAX_PIXELS`].
     #[allow(unused)]
-    pub(crate) fn new_unchecked(colors: &'a [Color]) -> Self {
+    pub(crate) const fn new_unchecked(colors: &'a [Color]) -> Self {
         Self(colors)
     }
 
@@ -177,7 +177,7 @@ impl PaletteSize {
     /// Creates a [`PaletteSize`] directly from the given `u16`
     /// without ensuring that it is less than or equal to [`MAX_COLORS`].
     #[allow(unused)]
-    pub(crate) fn new_unchecked(value: u16) -> Self {
+    pub(crate) const fn new_unchecked(value: u16) -> Self {
         Self(value)
     }
 

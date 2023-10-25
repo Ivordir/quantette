@@ -142,3 +142,18 @@ pub enum QuantizeMethod<Color> {
     #[cfg(feature = "kmeans")]
     Kmeans(KmeansOptions<Color>),
 }
+
+impl<Color> QuantizeMethod<Color> {
+    /// Creates a new [`QuantizeMethod::Wu`].
+    #[must_use]
+    pub const fn wu() -> Self {
+        Self::Wu(PhantomData)
+    }
+
+    /// Creates a new [`QuantizeMethod::Kmeans`] with the default [`KmeansOptions`].
+    #[must_use]
+    #[cfg(feature = "kmeans")]
+    pub const fn kmeans() -> Self {
+        Self::Kmeans(KmeansOptions::new())
+    }
+}

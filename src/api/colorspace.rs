@@ -1,17 +1,13 @@
 //! Contains the supported color spaces and utility functions for converting between them.
 
-use crate::{
-    wu::{Binner3, UIntBinner},
-    QuantizeMethod,
-};
+use crate::wu::{Binner3, UIntBinner};
 
 #[cfg(all(feature = "kmeans", feature = "colorspaces"))]
-use crate::kmeans::Centroids;
-#[cfg(feature = "kmeans")]
-use crate::KmeansOptions;
+use crate::{kmeans::Centroids, KmeansOptions};
 #[cfg(feature = "colorspaces")]
-use crate::{wu::FloatBinner, ColorSlice};
+use crate::{wu::FloatBinner, ColorSlice, QuantizeMethod};
 
+#[cfg(feature = "colorspaces")]
 use std::marker::PhantomData;
 
 #[cfg(feature = "colorspaces")]
@@ -152,7 +148,7 @@ where
 
 #[cfg(feature = "colorspaces")]
 impl QuantizeMethod<Srgb<u8>> {
-    /// Convert the colorspace
+    /// Converts to a different colorspace.
     #[allow(unused_variables)]
     pub(crate) fn convert_color_space_from_srgb<Color>(
         self,
@@ -175,20 +171,5 @@ impl QuantizeMethod<Srgb<u8>> {
                 batch_size,
             }),
         }
-    }
-}
-
-impl<Color> QuantizeMethod<Color> {
-    /// Creates a new [`QuantizeMethod::Wu`].
-    #[must_use]
-    pub const fn wu() -> Self {
-        Self::Wu(PhantomData)
-    }
-
-    /// Creates a new [`QuantizeMethod::Kmeans`] with the default [`KmeansOptions`].
-    #[must_use]
-    #[cfg(feature = "kmeans")]
-    pub const fn kmeans() -> Self {
-        Self::Kmeans(KmeansOptions::new())
     }
 }

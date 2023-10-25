@@ -37,7 +37,7 @@ impl FloydSteinberg {
         }
     }
 
-    /// Gets the error diffusion factor for this [`FloydSteinberg`]
+    /// Gets the error diffusion factor for this [`FloydSteinberg`].
     #[must_use]
     pub fn error_diffusion(&self) -> f32 {
         self.0

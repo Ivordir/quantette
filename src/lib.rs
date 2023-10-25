@@ -25,7 +25,7 @@
 //!     .palette_size(128.into()) // set the max number of colors in the palette
 //!     .dither(false) // turn dithering off
 //!     .colorspace(ColorSpace::Oklab) // use a more accurate color space
-//!     .quantize_method(QuantizeMethod::Kmeans(KmeansOptions::new()));
+//!     .quantize_method(QuantizeMethod::kmeans());
 //!
 //! // Run the pipeline in parallel to get an RgbImage
 //! let quantized = pipeline.quantized_rgbimage_par();

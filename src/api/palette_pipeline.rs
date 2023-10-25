@@ -245,24 +245,15 @@ impl<'a> PalettePipeline<'a> {
                     ..
                 } = self;
 
+                let binner = ColorSpace::default_binner_srgb_u8();
+
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
                         let color_counts = UniqueColorCounts::new(colors, |c| c);
-
-                        palette(
-                            &color_counts,
-                            k,
-                            QuantizeMethod::Kmeans(options),
-                            &ColorSpace::default_binner_srgb_u8(),
-                        )
+                        palette(&color_counts, k, QuantizeMethod::Kmeans(options), &binner)
                     }
-                    quantize_method => palette(
-                        &colors,
-                        k,
-                        quantize_method,
-                        &ColorSpace::default_binner_srgb_u8(),
-                    ),
+                    quantize_method => palette(&colors, k, quantize_method, &binner),
                 }
             }
             #[cfg(feature = "colorspaces")]
@@ -330,24 +321,15 @@ impl<'a> PalettePipeline<'a> {
                     ..
                 } = self;
 
+                let binner = ColorSpace::default_binner_srgb_u8();
+
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
                         let color_counts = UniqueColorCounts::new_par(colors, |c| c);
-
-                        palette_par(
-                            &color_counts,
-                            k,
-                            QuantizeMethod::Kmeans(options),
-                            &ColorSpace::default_binner_srgb_u8(),
-                        )
+                        palette_par(&color_counts, k, QuantizeMethod::Kmeans(options), &binner)
                     }
-                    quantize_method => palette_par(
-                        &colors,
-                        k,
-                        quantize_method,
-                        &ColorSpace::default_binner_srgb_u8(),
-                    ),
+                    quantize_method => palette_par(&colors, k, quantize_method, &binner),
                 }
             }
             #[cfg(feature = "colorspaces")]
@@ -389,7 +371,6 @@ impl<'a> PalettePipeline<'a> {
 
         let palette = if dedup_pixels {
             let color_counts = UniqueColorCounts::new_par(colors, convert_to);
-
             palette_par(&color_counts, k, quantize_method, binner)
         } else {
             let colors = convert_color_slice_par(colors, convert_to);
@@ -425,9 +406,7 @@ where
             let initial_centroids = initial_centroids.unwrap_or_else(|| {
                 Centroids::new_unchecked(wu::palette(color_counts, k, binner).palette)
             });
-
             let num_samples = num_samples(sampling_factor, color_counts);
-
             kmeans::palette(color_counts, num_samples, initial_centroids, seed).palette
         }
     }
@@ -461,9 +440,7 @@ where
             let initial_centroids = initial_centroids.unwrap_or_else(|| {
                 Centroids::new_unchecked(wu::palette_par(color_counts, k, binner).palette)
             });
-
             let num_samples = num_samples(sampling_factor, color_counts);
-
             kmeans::palette_par(
                 color_counts,
                 num_samples,

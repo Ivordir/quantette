@@ -61,7 +61,7 @@ use rayon::prelude::*;
 /// let pipeline = pipeline
 ///     .palette_size(192.into())
 ///     .colorspace(ColorSpace::Oklab)
-///     .quantize_method(QuantizeMethod::Kmeans(KmeansOptions::new()));
+///     .quantize_method(QuantizeMethod::kmeans());
 /// # Ok(())
 /// # }
 /// ```
@@ -78,7 +78,7 @@ use rayon::prelude::*;
 /// let pipeline = pipeline
 ///     .palette_size(192.into())
 ///     .colorspace(ColorSpace::Oklab)
-///     .quantize_method(QuantizeMethod::Kmeans(KmeansOptions::new()))
+///     .quantize_method(QuantizeMethod::kmeans())
 ///     .dither_error_diffusion(0.8);
 /// # Ok(())
 /// # }
@@ -282,12 +282,12 @@ impl<'a> ImagePipeline<'a> {
                 } = self;
 
                 let (width, height) = dimensions;
+                let binner = ColorSpace::default_binner_srgb_u8();
 
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
                         let color_counts = IndexedColorCounts::new(colors, |c| c);
-
                         indexed_palette(
                             &color_counts,
                             width,
@@ -295,7 +295,7 @@ impl<'a> ImagePipeline<'a> {
                             k,
                             QuantizeMethod::Kmeans(options),
                             ditherer,
-                            &ColorSpace::default_binner_srgb_u8(),
+                            &binner,
                         )
                     }
                     quantize_method => indexed_palette(
@@ -305,7 +305,7 @@ impl<'a> ImagePipeline<'a> {
                         k,
                         quantize_method,
                         ditherer,
-                        &ColorSpace::default_binner_srgb_u8(),
+                        &binner,
                     ),
                 }
             }
@@ -423,12 +423,12 @@ impl<'a> ImagePipeline<'a> {
                 } = self;
 
                 let (width, height) = dimensions;
+                let binner = ColorSpace::default_binner_srgb_u8();
 
                 match quantize_method {
                     #[cfg(feature = "kmeans")]
                     QuantizeMethod::Kmeans(options) if dedup_pixels => {
                         let color_counts = IndexedColorCounts::new_par(colors, |c| c);
-
                         indexed_palette_par(
                             &color_counts,
                             width,
@@ -436,7 +436,7 @@ impl<'a> ImagePipeline<'a> {
                             k,
                             QuantizeMethod::Kmeans(options),
                             ditherer,
-                            &ColorSpace::default_binner_srgb_u8(),
+                            &binner,
                         )
                     }
                     quantize_method => indexed_palette_par(
@@ -446,7 +446,7 @@ impl<'a> ImagePipeline<'a> {
                         k,
                         quantize_method,
                         ditherer,
-                        &ColorSpace::default_binner_srgb_u8(),
+                        &binner,
                     ),
                 }
             }
@@ -496,7 +496,6 @@ impl<'a> ImagePipeline<'a> {
 
         let (palette, indices) = if dedup_pixels {
             let color_counts = IndexedColorCounts::new_par(colors, convert_to);
-
             indexed_palette_par(
                 &color_counts,
                 width,
@@ -571,9 +570,7 @@ where
             let initial_centroids = initial_centroids.unwrap_or_else(|| {
                 Centroids::new_unchecked(wu::palette(color_counts, k, binner).palette)
             });
-
             let num_samples = num_samples(sampling_factor, color_counts);
-
             let res = kmeans::indexed_palette(color_counts, num_samples, initial_centroids, seed);
             (res.palette, res.indices)
         }
@@ -631,9 +628,7 @@ where
             let initial_centroids = initial_centroids.unwrap_or_else(|| {
                 Centroids::new_unchecked(wu::palette_par(color_counts, k, binner).palette)
             });
-
             let num_samples = num_samples(sampling_factor, color_counts);
-
             let res = kmeans::indexed_palette_par(
                 color_counts,
                 num_samples,

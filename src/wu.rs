@@ -194,7 +194,10 @@ macro_rules! ndvolume {
     };
 }
 
-impl<T: Copy + Zero + Add<Output = T> + Sub<Output = T>, const B: usize> Histogram3<T, B> {
+impl<T, const B: usize> Histogram3<T, B>
+where
+    T: Copy + Zero + Add<Output = T> + Sub<Output = T>,
+{
     /// Returns the sum of the histogram bins specified by the given cube.
     fn volume(&self, Cube { min, max }: Cube) -> T {
         let mut index = [0u8; N];
@@ -746,7 +749,8 @@ where
 
 /// A binner for colors with components that are unsigned integer types.
 ///
-/// `B` is the number of bins to have in each dimension and must be a power of 2.
+/// `B` is the number of bins to have in each dimension
+/// and must be a power of 2 less than or equal to `256`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct UIntBinner<const B: usize>;
 
@@ -765,7 +769,7 @@ impl<const B: usize> Binner3<u16, B> for UIntBinner<B> {
     fn bin(&self, components: [u16; N]) -> [u8; N] {
         assert!(B.is_power_of_two());
         let bits: u32 = B.ilog2();
-        assert!(bits <= u16::BITS);
+        assert!(bits <= u8::BITS);
         #[allow(clippy::cast_possible_truncation)]
         components.map(|c| (c >> (u16::BITS - bits)) as u8)
     }

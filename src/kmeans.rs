@@ -70,7 +70,7 @@ impl<Color> Centroids<Color> {
     /// Creates a [`Centroids`] without ensuring that its length
     /// is less than or equal to [`MAX_COLORS`].
     #[allow(unused)]
-    pub(crate) fn new_unchecked(centroids: Vec<Color>) -> Self {
+    pub(crate) const fn new_unchecked(centroids: Vec<Color>) -> Self {
         Self(centroids)
     }
 
@@ -200,7 +200,7 @@ where
 {
     /// Create a new [`State`] with the given initial centroids.
     fn new(color_counts: &'a ColorCount, centroids: Vec<Color>) -> Self {
-        let mut components = Vec::with_capacity(centroids.len().next_multiple_of(8));
+        let mut components = Vec::with_capacity(centroids.len().div_ceil(8));
         let chunks = centroids.as_arrays().chunks_exact(8);
         components.extend(
             chunks.clone().map(|chunk| {
@@ -824,7 +824,7 @@ mod tests {
         let centroids = to_float_arrays(&test_centroids());
         let points = to_float_arrays(&test_data_1024());
 
-        let mut components = Vec::with_capacity(centroids.len().next_multiple_of(8));
+        let mut components = Vec::with_capacity(centroids.len().div_ceil(8));
         let chunks = centroids.chunks_exact(8);
         components.extend(
             chunks
