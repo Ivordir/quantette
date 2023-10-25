@@ -1,4 +1,7 @@
-# Quantette
+# quantette
+
+[![Crate](https://badgen.net/crates/v/quantette)](https://crates.io/crates/quantette)
+[![Docs](https://docs.rs/quantette/badge.svg)](https://docs.rs/quantette)
 
 `quantette` is a library for fast and high quality image quantization and palette generation.
 It supports the sRGB color space for fast color quantization but also the CIELAB and Oklab
@@ -59,7 +62,7 @@ All output images are undithered to better highlight differences.
 
 # License
 
-Quantette is licensed under either
+`quantette` is licensed under either
 - the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0) (see [LICENSE-APACHE](LICENSE-APACHE))
 - the [MIT](http://opensource.org/licenses/MIT) license (see [LICENSE-MIT](LICENSE-MIT))
 
