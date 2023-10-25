@@ -1,7 +1,7 @@
 #[path = "../util/util.rs"]
 mod util;
 
-use util::unsplash_images;
+use util::benchmark_images;
 
 use std::time::Duration;
 
@@ -21,26 +21,8 @@ fn bench(c: &mut Criterion, group: &str, mut f: impl FnMut(&mut Bencher<WallTime
         .sampling_mode(SamplingMode::Flat)
         .warm_up_time(Duration::from_millis(500));
 
-    for (path, image) in unsplash_images() {
-        let (width, height) = image.dimensions();
-        let pixels = width * height;
-        let mut w = 240;
-        let mut h = 135;
-        let mut next_width = w * 2;
-        let mut next_height = h * 2;
-        while next_width * next_height < pixels {
-            let image = image::imageops::thumbnail(image, w, h);
-            group.bench_with_input(BenchmarkId::new(path, format!("{w}x{h}")), &image, &mut f);
-            w = next_width;
-            h = next_height;
-            next_width *= 2;
-            next_height *= 2;
-        }
-        group.bench_with_input(
-            BenchmarkId::new(path, format!("{width}x{height}")),
-            image,
-            &mut f,
-        );
+    for (path, image) in benchmark_images() {
+        group.bench_with_input(BenchmarkId::from_parameter(path), image, &mut f);
     }
 }
 

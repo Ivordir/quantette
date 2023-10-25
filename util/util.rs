@@ -21,14 +21,14 @@ pub fn load_images(images: &[PathBuf]) -> Vec<(String, RgbImage)> {
             })
         })
         .collect::<Result<_, _>>()
-        .expect("loaded each image")
+        .unwrap()
 }
 
 pub fn load_image_dir(dir: impl AsRef<Path>) -> Vec<(String, RgbImage)> {
     let mut paths = std::fs::read_dir(dir)
-        .expect("read img directory")
+        .unwrap()
         .collect::<Result<Vec<_>, _>>()
-        .expect("read each file")
+        .unwrap()
         .iter()
         .map(std::fs::DirEntry::path)
         .collect::<Vec<_>>();
@@ -38,7 +38,32 @@ pub fn load_image_dir(dir: impl AsRef<Path>) -> Vec<(String, RgbImage)> {
     load_images(&paths)
 }
 
-pub fn to_oklab_counts(
+fn generate_resolutions(images: Vec<(String, RgbImage)>) -> Vec<(String, RgbImage)> {
+    images
+        .into_iter()
+        .flat_map(|(path, image)| {
+            let mut images = Vec::new();
+            let (width, height) = image.dimensions();
+            let pixels = width * height;
+            let mut w = 240;
+            let mut h = 160;
+            let mut next_width = w * 2;
+            let mut next_height = h * 2;
+            while next_width * next_height < pixels {
+                let image = image::imageops::thumbnail(&image, w, h);
+                images.push((format!("{path}@{w}x{h}"), image));
+                w = next_width;
+                h = next_height;
+                next_width *= 2;
+                next_height *= 2;
+            }
+            images.push((format!("{path}@original"), image));
+            images
+        })
+        .collect()
+}
+
+fn to_oklab_counts(
     images: &[(String, RgbImage)],
 ) -> Vec<(String, IndexedColorCounts<Oklab, f32, 3>)> {
     images
@@ -71,22 +96,16 @@ pub fn load_image_dir_relative_to_root(dir: impl AsRef<Path>) -> Vec<(String, Rg
     load_image_dir(root.join(dir.as_ref()))
 }
 
-static UNSPLASH_IMAGES: OnceLock<Vec<(String, RgbImage)>> = OnceLock::new();
+static BENCHMARK_IMAGES: OnceLock<Vec<(String, RgbImage)>> = OnceLock::new();
 
-pub fn load_unsplash_images() -> Vec<(String, RgbImage)> {
-    load_image_dir_relative_to_root(UNSPLASH_DIR)
+pub fn benchmark_images() -> &'static [(String, RgbImage)] {
+    BENCHMARK_IMAGES
+        .get_or_init(|| generate_resolutions(load_image_dir_relative_to_root(UNSPLASH_DIR)))
 }
 
-pub fn unsplash_images() -> &'static [(String, RgbImage)] {
-    UNSPLASH_IMAGES.get_or_init(load_unsplash_images)
-}
+static BENCHMARK_COUNTS: OnceLock<Vec<(String, IndexedColorCounts<Oklab, f32, 3>)>> =
+    OnceLock::new();
 
-static CQ100_IMAGES: OnceLock<Vec<(String, RgbImage)>> = OnceLock::new();
-
-pub fn load_cq100_images() -> Vec<(String, RgbImage)> {
-    load_image_dir_relative_to_root(CQ100_DIR)
-}
-
-pub fn cq100_images() -> &'static [(String, RgbImage)] {
-    CQ100_IMAGES.get_or_init(load_cq100_images)
+pub fn benchmark_counts() -> &'static [(String, IndexedColorCounts<Oklab, f32, 3>)] {
+    BENCHMARK_COUNTS.get_or_init(|| to_oklab_counts(benchmark_images()))
 }

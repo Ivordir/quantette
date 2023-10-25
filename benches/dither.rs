@@ -1,7 +1,7 @@
 #[path = "../util/util.rs"]
 mod util;
 
-use util::unsplash_images;
+use util::benchmark_images;
 
 use std::time::Duration;
 
@@ -23,16 +23,9 @@ fn bench<ColorCount>(
         .sample_size(30)
         .noise_threshold(0.05)
         .sampling_mode(SamplingMode::Flat)
-        .warm_up_time(Duration::from_millis(500));
+        .warm_up_time(Duration::from_secs(2));
 
-    for (k, secs) in [
-        (PaletteSize::MAX, 4),
-        (128.into(), 4),
-        (64.into(), 3),
-        (32.into(), 2),
-        (16.into(), 2),
-    ] {
-        group.measurement_time(Duration::from_secs(secs));
+    for k in [PaletteSize::MAX, 64.into(), 16.into()] {
         for (path, counts) in counts {
             group.bench_with_input(BenchmarkId::new(k.to_string(), path), &(k, counts), &mut f);
         }
@@ -40,7 +33,7 @@ fn bench<ColorCount>(
 }
 
 fn dither_oklab_single(c: &mut Criterion) {
-    let counts = unsplash_images()
+    let counts = benchmark_images()
         .iter()
         .map(|(path, image)| {
             (
@@ -81,17 +74,21 @@ fn dither_oklab_single(c: &mut Criterion) {
 }
 
 fn dither_srgb_single(c: &mut Criterion) {
-    let counts = unsplash_images();
-    bench(c, "dither_srgb_single", counts, |b, &(k, image)| {
-        let (width, height) = image.dimensions();
-        let colors = ColorSlice::try_from(image).unwrap();
-        let result = wu::indexed_palette_par(&colors, k, &ColorSpace::default_binner_srgb_u8());
+    bench(
+        c,
+        "dither_srgb_single",
+        benchmark_images(),
+        |b, &(k, image)| {
+            let (width, height) = image.dimensions();
+            let colors = ColorSlice::try_from(image).unwrap();
+            let result = wu::indexed_palette_par(&colors, k, &ColorSpace::default_binner_srgb_u8());
 
-        b.iter(|| {
-            let mut indices = result.indices.clone();
-            FloydSteinberg::new().dither(&result.palette, &mut indices, &colors, width, height)
-        })
-    })
+            b.iter(|| {
+                let mut indices = result.indices.clone();
+                FloydSteinberg::new().dither(&result.palette, &mut indices, &colors, width, height)
+            })
+        },
+    )
 }
 
 criterion_group!(benches, dither_oklab_single, dither_srgb_single);

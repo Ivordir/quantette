@@ -180,7 +180,7 @@ fn main() {
 
 fn report(options: Report) {
     let images = if options.images.is_empty() {
-        util::load_cq100_images()
+        util::load_image_dir_relative_to_root(util::CQ100_DIR)
     } else {
         util::load_images(&options.images)
     };
