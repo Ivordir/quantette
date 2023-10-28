@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        rust-flags: ['', '-C target_feature=+avx2']
+        rust-flags: ['', '-C target_feature=+avx']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
