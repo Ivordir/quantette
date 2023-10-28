@@ -1,6 +1,6 @@
 [package]
 name = "quantette"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A fast and high quality image quantizer and palette generator. Supports the CIELAB, Oklab, and sRGB color spaces."
 homepage = "https://github.com/Ivordir/quantette"
