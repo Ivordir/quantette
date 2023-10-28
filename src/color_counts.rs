@@ -427,7 +427,7 @@ where
         }
     }
 
-    /// Tries to create a new [`UniqueColorCounts`] from an [`RgbImage`].
+    /// Tries to create a new [`UniqueColorCounts`] from a [`RgbImage`].
     ///
     /// The `convert_color` function can be used to convert the color space of the resulting colors.
     /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.
@@ -632,7 +632,7 @@ where
         }
     }
 
-    /// Tries to create a new [`IndexedColorCounts`] from an [`RgbImage`].
+    /// Tries to create a new [`IndexedColorCounts`] from a [`RgbImage`].
     ///
     /// The `convert_color` function can be used to convert the color space of the resulting colors.
     /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.
@@ -881,7 +881,7 @@ where
         }
     }
 
-    /// Tries to create a new [`UniqueColorCounts`] in parallel from an [`RgbImage`].
+    /// Tries to create a new [`UniqueColorCounts`] in parallel from a [`RgbImage`].
     ///
     /// The `convert_color` function can be used to convert the color space of the resulting colors.
     /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.
@@ -1089,7 +1089,7 @@ where
         }
     }
 
-    /// Tries to create a new [`IndexedColorCounts`] in parallel from an [`RgbImage`].
+    /// Tries to create a new [`IndexedColorCounts`] in parallel from a [`RgbImage`].
     ///
     /// The `convert_color` function can be used to convert the color space of the resulting colors.
     /// Use the identity function (i.e., `|srgb| srgb`) to skip color space conversion.

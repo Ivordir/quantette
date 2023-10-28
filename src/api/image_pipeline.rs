@@ -41,7 +41,7 @@ use rayon::prelude::*;
 /// A builder struct to specify options to create a quantized image or an indexed palette from an image.
 ///
 /// # Examples
-/// To start, create a [`ImagePipeline`] from an [`RgbImage`] (note that the `image` feature is needed):
+/// To start, create a [`ImagePipeline`] from a [`RgbImage`] (note that the `image` feature is needed):
 /// ```no_run
 /// # use quantette::ImagePipeline;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {

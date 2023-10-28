@@ -5,7 +5,7 @@ use super::num_samples;
 
 use crate::{
     wu::{self, Binner3},
-    ColorComponents, ColorCounts, ColorSlice, ColorSpace, ImagePipeline, PaletteSize,
+    AboveMaxLen, ColorComponents, ColorCounts, ColorSlice, ColorSpace, ImagePipeline, PaletteSize,
     QuantizeMethod, SumPromotion, ZeroedIsZero,
 };
 
@@ -13,8 +13,6 @@ use crate::{
 use crate::colorspace::convert_color_slice_par;
 #[cfg(feature = "colorspaces")]
 use crate::colorspace::{convert_color_slice, from_srgb, to_srgb};
-#[cfg(feature = "image")]
-use crate::AboveMaxLen;
 #[cfg(any(feature = "colorspaces", feature = "kmeans"))]
 use crate::UniqueColorCounts;
 #[cfg(feature = "kmeans")]
@@ -34,7 +32,7 @@ use palette::{Lab, Oklab};
 /// A builder struct to specify options to create a color palette for an image or slice of colors.
 ///
 /// # Examples
-/// To start, create a [`PalettePipeline`] from an [`RgbImage`] (note that the `image` feature is needed):
+/// To start, create a [`PalettePipeline`] from a [`RgbImage`] (note that the `image` feature is needed):
 /// ```no_run
 /// # use quantette::PalettePipeline;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -198,6 +196,14 @@ impl<'a> PalettePipeline<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a [Srgb<u8>]> for PalettePipeline<'a> {
+    type Error = AboveMaxLen<u32>;
+
+    fn try_from(slice: &'a [Srgb<u8>]) -> Result<Self, Self::Error> {
+        Ok(Self::new(slice.try_into()?))
+    }
+}
+
 #[cfg(feature = "image")]
 impl<'a> TryFrom<&'a RgbImage> for PalettePipeline<'a> {
     type Error = AboveMaxLen<u32>;
@@ -208,7 +214,7 @@ impl<'a> TryFrom<&'a RgbImage> for PalettePipeline<'a> {
 }
 
 impl<'a> From<ImagePipeline<'a>> for PalettePipeline<'a> {
-    fn from(value: ImagePipeline<'a>) -> Self {
+    fn from(pipeline: ImagePipeline<'a>) -> Self {
         let ImagePipeline {
             colors,
             k,
@@ -217,7 +223,7 @@ impl<'a> From<ImagePipeline<'a>> for PalettePipeline<'a> {
             #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
             dedup_pixels,
             ..
-        } = value;
+        } = pipeline;
 
         Self {
             colors,

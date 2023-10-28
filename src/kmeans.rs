@@ -110,8 +110,8 @@ impl<Color> Deref for Centroids<Color> {
 }
 
 impl<Color> From<Centroids<Color>> for Vec<Color> {
-    fn from(value: Centroids<Color>) -> Self {
-        value.into_inner()
+    fn from(centroids: Centroids<Color>) -> Self {
+        centroids.into_inner()
     }
 }
 

@@ -110,9 +110,9 @@ impl<'a, Color> From<ColorSlice<'a, Color>> for &'a [Color] {
 impl<'a, Color> TryFrom<&'a [Color]> for ColorSlice<'a, Color> {
     type Error = AboveMaxLen<u32>;
 
-    fn try_from(value: &'a [Color]) -> Result<Self, Self::Error> {
-        if value.len() <= MAX_PIXELS as usize {
-            Ok(Self(value))
+    fn try_from(slice: &'a [Color]) -> Result<Self, Self::Error> {
+        if slice.len() <= MAX_PIXELS as usize {
+            Ok(Self(slice))
         } else {
             Err(AboveMaxLen(MAX_PIXELS))
         }

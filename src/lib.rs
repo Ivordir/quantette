@@ -12,6 +12,8 @@
 //! - `threads`: exposes parallel versions of most functions via [`rayon`].
 //! - `image`: enables integration with the [`image`] crate.
 //!
+//! By default, all features are enabled.
+//!
 //! # High-Level API
 //! To get started with the high-level API, see [`ImagePipeline`].
 //! If you want a color palette instead of a quantized image, see [`PalettePipeline`] instead.
@@ -27,7 +29,7 @@
 //!     .colorspace(ColorSpace::Oklab) // use a more accurate color space
 //!     .quantize_method(QuantizeMethod::kmeans());
 //!
-//! // Run the pipeline in parallel to get an RgbImage
+//! // Run the pipeline in parallel to get a [`RgbImage`]
 //! let quantized = pipeline.quantized_rgbimage_par();
 //! # Ok(())
 //! # }

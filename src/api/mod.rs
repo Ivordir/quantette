@@ -59,7 +59,7 @@ impl<Color> KmeansOptions<Color> {
 
     /// Sets the sampling factor which controls what percentage of the image/unique colors to sample.
     ///
-    /// The default is `0.5`, that is, to sample half of the input.
+    /// The default sampling factor is `0.5`, that is, to sample half of the input.
     #[must_use]
     pub fn sampling_factor(mut self, sampling_factor: f32) -> Self {
         self.sampling_factor = sampling_factor;
@@ -88,8 +88,8 @@ impl<Color> KmeansOptions<Color> {
     /// Sets the batch size for the parallel implementation of the k-means quantizer
     /// (minibatch k-means).
     ///
-    /// Higher batch sizes should be faster with dimishing returns.
-    /// Lower batch sizes are more accurate but slower to run.
+    /// Larger batch sizes are faster with dimishing returns.
+    /// Smaller batch sizes are more accurate but slower to run.
     /// The batch is divided evenly among the number of threads.
     ///
     /// The default batch size is `4096`.

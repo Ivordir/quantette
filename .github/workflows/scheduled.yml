@@ -6,7 +6,7 @@ on:
 
 jobs:
   test:
-    name: Test with Latest Dependencies
+    name: Test with latest dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
