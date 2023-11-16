@@ -91,6 +91,9 @@ enum Quantizer {
 
         #[arg(long, default_value_t = 1.0)]
         dither_level: f32,
+
+        #[arg(short, long, default_value_t = 0)]
+        threads: u8,
     },
     Exoquant {
         #[arg(long)]
@@ -239,49 +242,56 @@ fn main() {
                 print_palette(colors)
             }
         }
-        Quantizer::Imagequant { quality, dither_level } => {
+        Quantizer::Imagequant { quality, dither_level, threads } => {
             let image = image.into_rgba8();
 
-            let mut libq = imagequant::new();
-            let mut img = libq
-                .new_image(
-                    image.as_rgba(),
-                    image.width() as usize,
-                    image.height() as usize,
-                    0.0,
-                )
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads.into())
+                .build()
                 .unwrap();
 
-            if let Some(quality) = quality {
-                libq.set_quality(0, quality).unwrap();
-            } else {
-                libq.set_max_colors(k.into_inner().into()).unwrap();
-            }
+            pool.install(|| {
+                let mut libq = imagequant::new();
+                let mut img = libq
+                    .new_image(
+                        image.as_rgba(),
+                        image.width() as usize,
+                        image.height() as usize,
+                        0.0,
+                    )
+                    .unwrap();
 
-            let mut quantized = log!("quantization", libq.quantize(&mut img).unwrap());
+                if let Some(quality) = quality {
+                    libq.set_quality(0, quality).unwrap();
+                } else {
+                    libq.set_max_colors(k.into_inner().into()).unwrap();
+                }
 
-            if let Some(output) = output {
-                let (colors, indices) = log!("remapping", {
-                    quantized.set_dithering_level(dither_level).unwrap();
-                    quantized.remapped(&mut img).unwrap()
-                });
+                let mut quantized = log!("quantization", libq.quantize(&mut img).unwrap());
 
-                let colors = colors
-                    .into_par_iter()
-                    .map(|c| Srgb::new(c.r, c.g, c.b))
-                    .collect();
+                if let Some(output) = output {
+                    let (colors, indices) = log!("remapping", {
+                        quantized.set_dithering_level(dither_level).unwrap();
+                        quantized.remapped(&mut img).unwrap()
+                    });
 
-                let image = indexed_image(image.dimensions(), colors, indices);
-                log!("write image", image.save(output).unwrap())
-            } else {
-                let colors = quantized
-                    .palette()
-                    .iter()
-                    .map(|c| Srgb::new(c.r, c.g, c.b))
-                    .collect();
+                    let colors = colors
+                        .into_par_iter()
+                        .map(|c| Srgb::new(c.r, c.g, c.b))
+                        .collect();
 
-                print_palette(colors)
-            }
+                    let image = indexed_image(image.dimensions(), colors, indices);
+                    log!("write image", image.save(output).unwrap())
+                } else {
+                    let colors = quantized
+                        .palette()
+                        .iter()
+                        .map(|c| Srgb::new(c.r, c.g, c.b))
+                        .collect();
+
+                    print_palette(colors)
+                }
+            })
         }
         Quantizer::Exoquant { kmeans, dither } => {
             let image = image.into_rgba8();
