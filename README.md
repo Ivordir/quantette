@@ -74,7 +74,7 @@ Note that `quantette` currently doesn't support alpha channel/component, while t
 - `exoquant` version `0.2.0` was run without k-means optimization, since it would otherwise take too long.
 
 The results below are for 256 colors. Additionally, all results are without dither,
-since `neuquant` doesn't have dithering.
+since `color_quant` doesn't have dithering.
 
 ## Time
 
