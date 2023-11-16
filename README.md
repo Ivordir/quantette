@@ -60,6 +60,52 @@ All output images are undithered to better highlight differences.
 | Wu - sRGB       | 0.00330477 | ![](docs/wu_srgb_256.png)      |
 | K-means - Oklab | 0.00160596 | ![](docs/kmeans_oklab_256.png) |
 
+# Benchmarks and Comparison
+
+Below are some comparisons between `quantette` and some other libraries.
+These should be taken with a grain of salt, as each library has different
+situations and/or options that can make then perform better or worse.
+These are meant to give a rough point of reference.
+Note that `quantette` currently doesn't support alpha channel/component, while the other libraries do.
+
+- `Wu - Srgb` and `K-mean Oklab` refer to the same settings/methods described above in [examples](#Examples).
+- `imagequant` version `4.2.2` was run using the default library options (quality of `100`).
+- `color_quant` version `1.1.0` was run with a `sample_frac` of `10`.
+- `exoquant` version `0.2.0` was run without k-means optimization, since it would otherwise take too long.
+
+The results below are for 256 colors. Additionally, all results are without dither,
+since `neuquant` doesn't have dithering.
+
+## Time
+
+"Time" refers to the total time, in milliseconds, for quantization and remapping
+as reported by the `simplecli` binary with the `--verbose` flag.
+The binary in question can be found in `examples/`. 30 trials were run and averaged for each data point.
+The `Wu - Srgb`, `K-means - Oklab`, and `imagequant` columns used 4 threads,
+while `color_quant` and `exoquant` only support single-threaded execution.
+So, multiply or divide by 4 as you see fit.
+
+| Image                  | Width | Height | Wu - Srgb | K-means - Oklab | imagequant | color_quant | exoquant |
+| ---------------------- | ----- | ------ | --------- | --------------- | ---------- | ----------- | -------- |
+| Akihabara.jpg          | 5663  | 3769   | 36        | 266             | 1492       | 3477        | 8672     |
+| Boothbay.jpg           | 6720  | 4480   | 49        | 261             | 1106       | 4514        | 7738     |
+| Hokkaido.jpg           | 6000  | 4000   | 39        | 205             | 776        | 3321        | 5844     |
+| Jewel Changi.jpg       | 6000  | 4000   | 41        | 166             | 652        | 2932        | 4915     |
+| Louvre.jpg             | 6056  | 4000   | 41        | 182             | 723        | 3701        | 5525     |
+
+## Accuracy/DSSIM
+
+The results below are DSSIM values as reported by the `accuracy` binary found in `examples/`.
+Note that `exoquant` results are not deterministic, since it uses `rand::random()`.
+
+| Image                  | Width | Height | Wu - Srgb  | K-means - Oklab | imagequant | color_quant | exoquant   |
+| ---------------------- | ----- | ------ | ---------- | --------------- | ---------- | ----------- | ---------- |
+| Akihabara.jpg          | 5663  | 3769   | 0.00762276 | 0.00388072      | 0.00432195 | 0.00749248  | 0.00583372 |
+| Boothbay.jpg           | 6720  | 4480   | 0.00437625 | 0.00226944      | 0.00242491 | 0.00585143  | 0.00345061 |
+| Hokkaido.jpg           | 6000  | 4000   | 0.00339461 | 0.00157206      | 0.00172781 | 0.00325078  | 0.00382358 |
+| Jewel Changi.jpg       | 6000  | 4000   | 0.00159665 | 0.00074988      | 0.00076888 | 0.00156673  | 0.00102799 |
+| Louvre.jpg             | 6056  | 4000   | 0.00305672 | 0.00143401      | 0.00156126 | 0.00348470  | 0.00244134 |
+
 # License
 
 `quantette` is licensed under either
