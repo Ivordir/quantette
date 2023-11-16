@@ -68,7 +68,7 @@ situations and/or options that can make then perform better or worse.
 These are meant to give a rough point of reference.
 Note that `quantette` currently doesn't support alpha channel/component, while the other libraries do.
 
-- `Wu - Srgb` and `K-mean Oklab` refer to the same settings/methods described above in [examples](#Examples).
+- `Wu - Srgb` and `K-means - Oklab` refer to the same settings/methods described above in [examples](#Examples).
 - `imagequant` version `4.2.2` was run using the default library options (quality of `100`).
 - `color_quant` version `1.1.0` was run with a `sample_frac` of `10`.
 - `exoquant` version `0.2.0` was run without k-means optimization, since it would otherwise take too long.
