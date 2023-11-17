@@ -13,6 +13,7 @@
 )]
 
 use std::{
+    ffi::OsStr,
     fmt::{self, Display},
     path::PathBuf,
 };
@@ -180,9 +181,22 @@ fn main() {
 
 fn report(options: Report) {
     let images = if options.images.is_empty() {
-        util::load_image_dir_relative_to_root(util::CQ100_DIR)
+        util::load_image_dir_relative_to_root(
+            ["img", "CQ100", "img"].into_iter().collect::<PathBuf>(),
+        )
+        .into_iter()
+        .map(|(path, img)| {
+            let name = path.file_stem().and_then(OsStr::to_str).unwrap().to_owned();
+            (name, img)
+        })
+        .collect::<Vec<_>>()
     } else {
-        util::load_images(&options.images)
+        options
+            .images
+            .iter()
+            .map(|path| path.display().to_string())
+            .zip(util::load_images(&options.images))
+            .collect()
     };
 
     // use char count as supplement for grapheme count
@@ -199,7 +213,8 @@ fn report(options: Report) {
             .k
             .iter()
             .map(|k| format!(
-                "{k:>0$} {1}",
+                "{:>1$} {2}",
+                k.into_inner(),
                 COL_WIDTH - NUM_DECIMALS - 1,
                 str::repeat(" ", NUM_DECIMALS)
             ))
