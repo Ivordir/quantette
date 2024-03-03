@@ -5,10 +5,7 @@ use crate::wu::{Binner3, UIntBinner};
 #[cfg(all(feature = "kmeans", feature = "colorspaces"))]
 use crate::{kmeans::Centroids, KmeansOptions};
 #[cfg(feature = "colorspaces")]
-use crate::{wu::FloatBinner, ColorSlice, QuantizeMethod};
-
-#[cfg(feature = "colorspaces")]
-use std::marker::PhantomData;
+use crate::{wu::FloatBinner, ColorSlice, QuantizeMethod, WuOptions};
 
 #[cfg(feature = "colorspaces")]
 use ::palette::{IntoColor, LinSrgb, Srgb};
@@ -155,7 +152,7 @@ impl QuantizeMethod<Srgb<u8>> {
         convert_to: impl Fn(Srgb<u8>) -> Color,
     ) -> QuantizeMethod<Color> {
         match self {
-            QuantizeMethod::Wu(_) => QuantizeMethod::Wu(PhantomData),
+            QuantizeMethod::Wu(_) => QuantizeMethod::Wu(WuOptions::new()),
             #[cfg(feature = "kmeans")]
             QuantizeMethod::Kmeans(KmeansOptions {
                 sampling_factor,

@@ -89,7 +89,7 @@ use palette::{Lab, Oklab};
 /// let pipeline = pipeline
 ///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
-///     .quantize_method(QuantizeMethod::Kmeans(KmeansOptions::new()));
+///     .quantize_method(KmeansOptions::new());
 /// # Ok(())
 /// # }
 /// ```
@@ -174,8 +174,11 @@ impl<'a> PalettePipeline<'a> {
     /// The default quantization method is [`QuantizeMethod::Wu`].
     #[must_use]
     #[cfg(feature = "kmeans")]
-    pub fn quantize_method(mut self, quantize_method: QuantizeMethod<Srgb<u8>>) -> Self {
-        self.quantize_method = quantize_method;
+    pub fn quantize_method<T: Into<QuantizeMethod<Srgb<u8>>>>(
+        mut self,
+        quantize_method: T,
+    ) -> Self {
+        self.quantize_method = quantize_method.into();
         self
     }
 
