@@ -89,6 +89,12 @@ pub use types::*;
 #[cfg(feature = "pipelines")]
 pub use api::*;
 
+// Re-export third party crates with types present in our public API
+#[cfg(feature = "image")]
+pub use image;
+#[cfg(any(feature = "pipelines", feature = "image"))]
+pub use palette;
+
 /// The maximum supported image size in number of pixels is `u32::MAX`.
 pub const MAX_PIXELS: u32 = u32::MAX;
 
