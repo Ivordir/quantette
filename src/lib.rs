@@ -24,7 +24,7 @@
 //! let img = image::open("some image")?.into_rgb8();
 //!
 //! let pipeline = ImagePipeline::try_from(&img)?
-//!     .palette_size(128.into()) // set the max number of colors in the palette
+//!     .palette_size(128) // set the max number of colors in the palette
 //!     .dither(false) // turn dithering off
 //!     .colorspace(ColorSpace::Oklab) // use a more accurate color space
 //!     .quantize_method(QuantizeMethod::kmeans());

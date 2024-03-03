@@ -60,7 +60,7 @@ use palette::{Lab, Oklab};
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
 /// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
-/// let pipeline = pipeline.palette_size(192.into());
+/// let pipeline = pipeline.palette_size(192);
 /// # Ok(())
 /// # }
 /// ```
@@ -73,7 +73,7 @@ use palette::{Lab, Oklab};
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
 /// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
 /// let pipeline = pipeline
-///     .palette_size(192.into())
+///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab);
 /// # Ok(())
 /// # }
@@ -87,7 +87,7 @@ use palette::{Lab, Oklab};
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
 /// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
 /// let pipeline = pipeline
-///     .palette_size(192.into())
+///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
 ///     .quantize_method(QuantizeMethod::Kmeans(KmeansOptions::new()));
 /// # Ok(())
@@ -150,8 +150,8 @@ impl<'a> PalettePipeline<'a> {
     ///
     /// The default palette size is [`PaletteSize::MAX`].
     #[must_use]
-    pub fn palette_size(mut self, size: PaletteSize) -> Self {
-        self.k = size;
+    pub fn palette_size<T: Into<PaletteSize>>(mut self, size: T) -> Self {
+        self.k = size.into();
         self
     }
 

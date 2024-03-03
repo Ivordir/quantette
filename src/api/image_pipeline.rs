@@ -59,7 +59,7 @@ use rayon::prelude::*;
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
 /// # let pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
 /// let pipeline = pipeline
-///     .palette_size(192.into())
+///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
 ///     .quantize_method(QuantizeMethod::kmeans());
 /// # Ok(())
@@ -76,7 +76,7 @@ use rayon::prelude::*;
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
 /// # let pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
 /// let pipeline = pipeline
-///     .palette_size(192.into())
+///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
 ///     .quantize_method(QuantizeMethod::kmeans())
 ///     .dither_error_diffusion(0.8);
@@ -160,8 +160,8 @@ impl<'a> ImagePipeline<'a> {
     ///
     /// The default palette size is [`PaletteSize::MAX`].
     #[must_use]
-    pub fn palette_size(mut self, size: PaletteSize) -> Self {
-        self.k = size;
+    pub fn palette_size<T: Into<PaletteSize>>(mut self, size: T) -> Self {
+        self.k = size.into();
         self
     }
 
