@@ -1,3 +1,5 @@
 /target
 /Cargo.lock
+/.vscode
 /examples/plot/data
+/temp
