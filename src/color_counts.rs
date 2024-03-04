@@ -394,6 +394,7 @@ where
                             let color = cast::from_array([r as u8, g as u8, b as u8]);
                             colors.push(convert_color(color));
                             counts.push(lower_counts[g][b]);
+                            lower_counts[g][b] = 0;
                         }
 
                         bitmask.fill(false);
@@ -412,9 +413,9 @@ where
                                 }
                             }
                         }
-                    }
 
-                    lower_counts.fill_zero();
+                        lower_counts.fill_zero();
+                    }
                 }
             }
 
@@ -570,7 +571,8 @@ where
                     let green_blue = &green_blue[chunk.clone()];
                     let orig_index = &orig_index[chunk.clone()];
 
-                    if chunk.len() < RADIX * RADIX / 4 {
+                    let sparse = chunk.len() < RADIX * RADIX / 4;
+                    if sparse {
                         for gb in green_blue {
                             let [g, b] = gb.map(usize::from);
                             lower_counts[g][b] += 1;
@@ -590,8 +592,6 @@ where
                             colors.push(convert_color(color));
                             counts.push(count);
                         }
-
-                        bitmask.fill(false);
                     } else {
                         for &[g, b] in green_blue {
                             lower_counts[usize::from(g)][usize::from(b)] += 1;
@@ -618,7 +618,16 @@ where
                         indices[i as usize] = lower_counts[usize::from(g)][usize::from(b)];
                     }
 
-                    lower_counts.fill_zero();
+                    if sparse {
+                        for i in bitmask.iter_ones() {
+                            let g = i / RADIX;
+                            let b = i % RADIX;
+                            lower_counts[g][b] = 0;
+                        }
+                        bitmask.fill(false);
+                    } else {
+                        lower_counts.fill_zero();
+                    }
                 }
             }
 
