@@ -610,7 +610,7 @@ fn indexed_palette_par<Color, Component, const B: usize>(
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> (Vec<Color>, Vec<u8>)
 where
-    Color: ColorComponents<Component, 3> + Send,
+    Color: ColorComponents<Component, 3> + Send + Sync,
     Component: SumPromotion<u32> + Into<f32> + Send + Sync,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     u32: Into<Component::Sum>,
@@ -645,7 +645,7 @@ where
 
     if let Some(ditherer) = ditherer {
         if let Some(original_indices) = color_counts.indices() {
-            ditherer.dither_indexed(
+            ditherer.dither_indexed_par(
                 &palette,
                 &mut indices,
                 color_counts.colors(),
@@ -654,7 +654,7 @@ where
                 height,
             );
         } else {
-            ditherer.dither(&palette, &mut indices, color_counts.colors(), width, height);
+            ditherer.dither_par(&palette, &mut indices, color_counts.colors(), width, height);
         }
     }
 

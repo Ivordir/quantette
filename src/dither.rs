@@ -8,6 +8,9 @@ use ordered_float::OrderedFloat;
 use palette::cast::AsArrays;
 use wide::{f32x8, u32x8, CmpLe};
 
+#[cfg(feature = "threads")]
+use rayon::prelude::*;
+
 /// Floyd–Steinberg dithering.
 #[derive(Debug, Clone, Copy)]
 pub struct FloydSteinberg(f32);
@@ -370,6 +373,294 @@ impl FloydSteinberg {
             error2[1] = [0.0; N];
             error2[width] = [0.0; N];
         }
+    }
+}
+
+#[cfg(feature = "threads")]
+impl FloydSteinberg {
+    /// Performs dithering on the given indices in parallel.
+    ///
+    /// The original input/image is taken in the form of an indexed palette.
+    #[allow(clippy::too_many_lines)]
+    pub fn dither_indexed_par<Color, Component, const N: usize>(
+        &self,
+        palette: &[Color],
+        indices: &mut [u8],
+        original_colors: &[Color],
+        original_indices: &[u32],
+        width: u32,
+        height: u32,
+    ) where
+        Color: ColorComponents<Component, N> + Sync,
+        Component: Copy + Into<f32> + Sync,
+    {
+        let FloydSteinberg(diffusion) = *self;
+
+        if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
+            return;
+        }
+
+        let palette = palette
+            .as_arrays()
+            .iter()
+            .map(|c| c.map(Into::into))
+            .collect::<Vec<_>>();
+
+        let (distances, components) = distance_table(&palette);
+
+        let w = width as usize;
+        let h = height as usize;
+
+        let num_chunks = usize::min(rayon::current_num_threads(), height.div_ceil(256) as usize);
+        let rows_per_chunk = h.div_ceil(num_chunks);
+        let chunk_size = w * rows_per_chunk;
+
+        let indices_prev_chunk_last_row = {
+            let mut prev_rows = indices
+                .chunks(chunk_size)
+                .map(|chunk| &chunk[(chunk.len() - w)..])
+                .collect::<Vec<_>>();
+
+            prev_rows.pop();
+            prev_rows.concat()
+        };
+
+        let original_colors = original_colors.as_arrays();
+
+        indices
+            .par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(i, indices)| {
+                let chunk_start = i * chunk_size;
+
+                let mut error = vec![[0.0; N]; 2 * (w + 2)];
+                let (mut error1, mut error2) = error.split_at_mut(w + 2);
+                let mut pixel_row = vec![[0.0; N]; w];
+
+                if i > 0 {
+                    let prev_row = &indices_prev_chunk_last_row[((i - 1) * w)..(i * w)];
+                    let colors = &original_indices[(chunk_start - w)..chunk_start];
+
+                    for (d, &s) in pixel_row.iter_mut().zip(colors) {
+                        *d = original_colors[s as usize].map(Into::into);
+                    }
+
+                    for (x, (&index, &og)) in prev_row.iter().zip(&pixel_row).enumerate().rev() {
+                        let mut point = og.map(Into::into);
+                        let err = error1[x + 1];
+                        for i in 0..N {
+                            point[i] += err[i];
+                        }
+
+                        let nearest_point =
+                            nearest_neighbor(index, point, &palette, &distances, &components).1;
+
+                        let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
+                        arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
+                        arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
+                        arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
+                        arr_mul_assign(&mut error2[x], 1.0 / 16.0, &err);
+                    }
+
+                    std::mem::swap(&mut error1, &mut error2);
+                    error2[1] = [0.0; N];
+                    error2[w] = [0.0; N];
+                }
+
+                let original_indices = &original_indices
+                    [chunk_start..usize::min(chunk_start + chunk_size, original_indices.len())];
+
+                for (row, (indices, colors)) in indices
+                    .chunks_exact_mut(w)
+                    .zip(original_indices.chunks_exact(w))
+                    .enumerate()
+                {
+                    for (d, &s) in pixel_row.iter_mut().zip(colors) {
+                        *d = original_colors[s as usize].map(Into::into);
+                    }
+
+                    if row % 2 == 0 {
+                        for (x, (index, &og)) in indices.iter_mut().zip(&pixel_row).enumerate() {
+                            let mut point = og.map(Into::into);
+                            let err = error1[x + 1];
+                            for i in 0..N {
+                                point[i] += err[i];
+                            }
+
+                            let (nearest_index, nearest_point) =
+                                nearest_neighbor(*index, point, &palette, &distances, &components);
+
+                            *index = nearest_index;
+                            let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
+                            arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
+                            arr_mul_assign(&mut error2[x + 2], 1.0 / 16.0, &err);
+                        }
+                    } else {
+                        for (x, (index, &og)) in
+                            indices.iter_mut().zip(&pixel_row).enumerate().rev()
+                        {
+                            let mut point = og.map(Into::into);
+                            let err = error1[x + 1];
+                            for i in 0..N {
+                                point[i] += err[i];
+                            }
+
+                            let (nearest_index, nearest_point) =
+                                nearest_neighbor(*index, point, &palette, &distances, &components);
+
+                            *index = nearest_index;
+                            let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
+                            arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
+                            arr_mul_assign(&mut error2[x], 1.0 / 16.0, &err);
+                        }
+                    }
+
+                    std::mem::swap(&mut error1, &mut error2);
+                    error2[1] = [0.0; N];
+                    error2[w] = [0.0; N];
+                }
+            });
+    }
+
+    /// Performs dithering on the given indices in parallel.
+    pub fn dither_par<Color, Component, const N: usize>(
+        &self,
+        palette: &[Color],
+        indices: &mut [u8],
+        original_colors: &[Color],
+        width: u32,
+        height: u32,
+    ) where
+        Color: ColorComponents<Component, N> + Sync,
+        Component: Copy + Into<f32>,
+    {
+        let FloydSteinberg(diffusion) = *self;
+
+        if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
+            return;
+        }
+
+        let palette = palette
+            .as_arrays()
+            .iter()
+            .map(|c| c.map(Into::into))
+            .collect::<Vec<_>>();
+
+        let (distances, components) = distance_table(&palette);
+
+        let w = width as usize;
+        let h = height as usize;
+
+        let num_chunks = usize::min(rayon::current_num_threads(), height.div_ceil(256) as usize);
+        let rows_per_chunk = h.div_ceil(num_chunks);
+        let chunk_size = w * rows_per_chunk;
+
+        let indices_prev_chunk_last_row = {
+            let mut prev_rows = indices
+                .chunks(chunk_size)
+                .map(|chunk| &chunk[(chunk.len() - w)..])
+                .collect::<Vec<_>>();
+
+            prev_rows.pop();
+            prev_rows.concat()
+        };
+
+        indices
+            .par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(i, indices)| {
+                let chunk_start = i * chunk_size;
+
+                let mut error = vec![[0.0; N]; 2 * (w + 2)];
+                let (mut error1, mut error2) = error.split_at_mut(w + 2);
+
+                if i > 0 {
+                    let prev_row = &indices_prev_chunk_last_row[((i - 1) * w)..(i * w)];
+                    let colors = original_colors[(chunk_start - w)..chunk_start].as_arrays();
+
+                    for (x, (&index, &og)) in prev_row.iter().zip(colors).enumerate().rev() {
+                        let mut point = og.map(Into::into);
+                        let err = error1[x + 1];
+                        for i in 0..N {
+                            point[i] += err[i];
+                        }
+
+                        let nearest_point =
+                            nearest_neighbor(index, point, &palette, &distances, &components).1;
+
+                        let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
+                        arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
+                        arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
+                        arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
+                        arr_mul_assign(&mut error2[x], 1.0 / 16.0, &err);
+                    }
+
+                    std::mem::swap(&mut error1, &mut error2);
+                    error2[1] = [0.0; N];
+                    error2[w] = [0.0; N];
+                }
+
+                let original_colors = &original_colors
+                    [chunk_start..usize::min(chunk_start + chunk_size, original_colors.len())];
+
+                for (row, (indices, colors)) in indices
+                    .chunks_exact_mut(w)
+                    .zip(original_colors.as_arrays().chunks_exact(w))
+                    .enumerate()
+                {
+                    if row % 2 == 0 {
+                        for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
+                            let mut point = og.map(Into::into);
+                            let err = error1[x + 1];
+                            for i in 0..N {
+                                point[i] += err[i];
+                            }
+
+                            let (nearest_index, nearest_point) =
+                                nearest_neighbor(*index, point, &palette, &distances, &components);
+
+                            *index = nearest_index;
+                            let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
+                            arr_mul_add_assign(&mut error1[x + 2], 7.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x], 3.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
+                            arr_mul_assign(&mut error2[x + 2], 1.0 / 16.0, &err);
+                        }
+                    } else {
+                        for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
+                            let mut point = og.map(Into::into);
+                            let err = error1[x + 1];
+                            for i in 0..N {
+                                point[i] += err[i];
+                            }
+
+                            let (nearest_index, nearest_point) =
+                                nearest_neighbor(*index, point, &palette, &distances, &components);
+
+                            *index = nearest_index;
+                            let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
+
+                            arr_mul_add_assign(&mut error1[x], 7.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x + 2], 3.0 / 16.0, &err);
+                            arr_mul_add_assign(&mut error2[x + 1], 5.0 / 16.0, &err);
+                            arr_mul_assign(&mut error2[x], 1.0 / 16.0, &err);
+                        }
+                    }
+
+                    std::mem::swap(&mut error1, &mut error2);
+                    error2[1] = [0.0; N];
+                    error2[w] = [0.0; N];
+                }
+            });
     }
 }
 
