@@ -582,7 +582,7 @@ where
     /// Creates a new [`Wu3`] in parallel with histogram data filled by the given `color_counts`.
     fn new_par(color_counts: &'a ColorCount, binner: &'a Binner) -> Self {
         let chunk_size = color_counts.len().div_ceil(rayon::current_num_threads());
-        let partials = if let Some(counts) = color_counts.counts() {
+        let mut data = if let Some(counts) = color_counts.counts() {
             color_counts
                 .color_components()
                 .par_chunks(chunk_size)
@@ -592,7 +592,7 @@ where
                     data.add_color_counts(colors, counts);
                     data
                 })
-                .collect()
+                .reduce_with(Self::merge_partial)
         } else {
             color_counts
                 .color_components()
@@ -602,36 +602,27 @@ where
                     data.add_colors(colors);
                     data
                 })
-                .collect()
-        };
-
-        Self::merge_partials(partials, color_counts, binner)
-    }
-
-    /// Merges multiple [`Wu3`]s together by element-wise summing their histogram bins together
-    /// and then computing cumulative moments on the final histogram.
-    fn merge_partials(
-        mut partials: Vec<Self>,
-        color_counts: &'a ColorCount,
-        binner: &'a Binner,
-    ) -> Self {
-        let mut data = partials
-            .pop()
-            .unwrap_or_else(|| Self::new_zero(color_counts, binner));
-
-        for other in partials {
-            for x in 0..B {
-                for y in 0..B {
-                    for z in 0..B {
-                        data.hist[[x, y, z]] += other.hist[[x, y, z]];
-                    }
-                }
-            }
+                .reduce_with(Self::merge_partial)
         }
+        .unwrap_or_else(|| Self::new_zero(color_counts, binner));
 
         data.calc_cumulative_moments();
 
         data
+    }
+
+    /// Merges multiple [`Wu3`]s together by element-wise summing their histogram bins together
+    /// and then computing cumulative moments on the final histogram.
+    #[allow(clippy::needless_pass_by_value)]
+    fn merge_partial(mut self, other: Self) -> Self {
+        for x in 0..B {
+            for y in 0..B {
+                for z in 0..B {
+                    self.hist[[x, y, z]] += other.hist[[x, y, z]];
+                }
+            }
+        }
+        self
     }
 }
 
