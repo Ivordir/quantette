@@ -133,8 +133,9 @@ pub enum QuantizeMethod<Color> {
     /// Color quantization using k-means clustering.
     ///
     /// This method is slower than Wu's color quantizer but gives more accurate results.
-    /// It is recommended to combine this method with either the [`ColorSpace::Oklab`] or [`ColorSpace::Lab`]
-    /// settings, because `quantette` will, by default, deduplicate pixels to speed up k-means.
+    /// It is recommended to combine this method with either the
+    /// [`ColorSpace::Oklab`](crate::ColorSpace::Oklab) or [`ColorSpace::Lab`](crate::ColorSpace::Lab) settings,
+    /// because `quantette` will, by default, deduplicate pixels to speed up k-means.
     /// This allows colorspace conversion to be much faster as well,
     /// since only each unique color needs to be converted instead of each pixel.
     ///
