@@ -736,6 +736,17 @@ mod tests {
         ditherer.dither::<Srgb<u8>, u8, 3>(&[], &mut [], &colors, len, 1);
         let indices = (0..len).collect::<Vec<_>>();
         ditherer.dither_indexed::<Srgb<u8>, u8, 3>(&[], &mut [], &colors, &indices, len, 1);
+
+        #[cfg(feature = "threads")]
+        {
+            // empty image and palette
+            ditherer.dither_par::<Srgb<u8>, u8, 3>(&[], &mut [], &[], 0, 0);
+            ditherer.dither_indexed_par::<Srgb<u8>, u8, 3>(&[], &mut [], &[], &[], 0, 0);
+
+            // only empty palette
+            ditherer.dither_par::<Srgb<u8>, u8, 3>(&[], &mut [], &colors, len, 1);
+            ditherer.dither_indexed_par::<Srgb<u8>, u8, 3>(&[], &mut [], &colors, &indices, len, 1);
+        }
     }
 
     #[test]
@@ -774,5 +785,23 @@ mod tests {
             height,
         );
         assert_eq!(indices, new_indices);
+
+        #[cfg(feature = "threads")]
+        {
+            let mut new_indices = indices.clone();
+            ditherer.dither_par(&palette, &mut new_indices, &original_colors, width, height);
+            assert_eq!(indices, new_indices);
+
+            let mut new_indices = indices.clone();
+            ditherer.dither_indexed_par(
+                &palette,
+                &mut new_indices,
+                &palette,
+                &original_indices,
+                width,
+                height,
+            );
+            assert_eq!(indices, new_indices);
+        }
     }
 }
