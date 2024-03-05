@@ -821,6 +821,10 @@ mod tests {
             dist
         }
 
+        fn to_float_arrays(data: &[Srgb<u8>]) -> Vec<[f32; 3]> {
+            data.as_arrays().iter().map(|c| c.map(Into::into)).collect()
+        }
+
         let centroids = to_float_arrays(&test_centroids());
         let points = to_float_arrays(&test_data_1024());
 

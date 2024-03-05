@@ -107,14 +107,7 @@ mod tests {
 
     use std::fmt::Debug;
 
-    use palette::{
-        cast::{AsArrays, ComponentsInto},
-        Srgb,
-    };
-
-    pub fn to_float_arrays(data: &[Srgb<u8>]) -> Vec<[f32; 3]> {
-        data.as_arrays().iter().map(|c| c.map(f32::from)).collect()
-    }
+    use palette::{cast::ComponentsInto, Srgb};
 
     #[rustfmt::skip]
     pub fn test_data_256() -> Vec<Srgb<u8>> {
