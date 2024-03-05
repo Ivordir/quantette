@@ -469,36 +469,26 @@ impl FloydSteinberg {
 
         let table = DistanceTable::new(palette);
 
-        let w = width as usize;
-        let h = height as usize;
+        let width = width as usize;
+        let height = height as usize;
+        let chunk_size = chunk_size(width, height);
 
-        let num_chunks = usize::min(rayon::current_num_threads(), h.div_ceil(256));
-        let rows_per_chunk = h.div_ceil(num_chunks);
-        let chunk_size = w * rows_per_chunk;
-
-        let mut indices_prev_chunk_last_row = {
-            let mut prev_rows = indices
-                .chunks(chunk_size)
-                .map(|chunk| &chunk[(chunk.len() - w)..])
-                .collect::<Vec<_>>();
-
-            prev_rows.rotate_right(1);
-            prev_rows.concat()
-        };
+        let mut indices_prev_chunk_last_row =
+            indices_prev_chunk_last_row(width, chunk_size, indices);
 
         indices
             .par_chunks_mut(chunk_size)
-            .zip(indices_prev_chunk_last_row.par_chunks_mut(w))
+            .zip(indices_prev_chunk_last_row.par_chunks_mut(width))
             .enumerate()
             .for_each(|(chunk_i, (indices, prev_row))| {
                 let chunk_start = chunk_i * chunk_size;
 
-                let mut error = ErrorBuf::new_buf(w);
-                let mut error = ErrorBuf::new(w, &mut error);
-                let mut pixel_row = vec![[0.0; N]; w];
+                let mut error = ErrorBuf::new_buf(width);
+                let mut error = ErrorBuf::new(width, &mut error);
+                let mut pixel_row = vec![[0.0; N]; width];
 
                 if chunk_i > 0 {
-                    let colors = &original_indices[(chunk_start - w)..chunk_start];
+                    let colors = &original_indices[(chunk_start - width)..chunk_start];
                     let original_colors = original_colors.as_arrays();
 
                     for (d, &s) in pixel_row.iter_mut().zip(colors) {
@@ -524,7 +514,7 @@ impl FloydSteinberg {
                     [chunk_start..usize::min(chunk_start + chunk_size, original_indices.len())];
 
                 dither_indexed(
-                    w,
+                    width,
                     indices,
                     original_colors,
                     original_indices,
@@ -556,35 +546,25 @@ impl FloydSteinberg {
 
         let table = DistanceTable::new(palette);
 
-        let w = width as usize;
-        let h = height as usize;
+        let width = width as usize;
+        let height = height as usize;
+        let chunk_size = chunk_size(width, height);
 
-        let num_chunks = usize::min(rayon::current_num_threads(), h.div_ceil(256));
-        let rows_per_chunk = h.div_ceil(num_chunks);
-        let chunk_size = w * rows_per_chunk;
-
-        let mut indices_prev_chunk_last_row = {
-            let mut prev_rows = indices
-                .chunks(chunk_size)
-                .map(|chunk| &chunk[(chunk.len() - w)..])
-                .collect::<Vec<_>>();
-
-            prev_rows.rotate_right(1);
-            prev_rows.concat()
-        };
+        let mut indices_prev_chunk_last_row =
+            indices_prev_chunk_last_row(width, chunk_size, indices);
 
         indices
             .par_chunks_mut(chunk_size)
-            .zip(indices_prev_chunk_last_row.par_chunks_mut(w))
+            .zip(indices_prev_chunk_last_row.par_chunks_mut(width))
             .enumerate()
             .for_each(|(chunk_i, (indices, prev_row))| {
                 let chunk_start = chunk_i * chunk_size;
 
-                let mut error = ErrorBuf::new_buf(w);
-                let mut error = ErrorBuf::new(w, &mut error);
+                let mut error = ErrorBuf::new_buf(width);
+                let mut error = ErrorBuf::new(width, &mut error);
 
                 if chunk_i > 0 {
-                    let colors = original_colors[(chunk_start - w)..chunk_start].as_arrays();
+                    let colors = original_colors[(chunk_start - width)..chunk_start].as_arrays();
 
                     for (i, (index, &og)) in prev_row.iter_mut().zip(colors).enumerate().rev() {
                         let err = dither_pixel(
@@ -604,9 +584,29 @@ impl FloydSteinberg {
                 let original_colors = &original_colors
                     [chunk_start..usize::min(chunk_start + chunk_size, original_colors.len())];
 
-                dither(w, indices, original_colors, &table, error, diffusion);
+                dither(width, indices, original_colors, &table, error, diffusion);
             });
     }
+}
+
+/// Returns the `indices` chunk size for parallel dithering.
+#[cfg(feature = "threads")]
+fn chunk_size(width: usize, height: usize) -> usize {
+    let num_chunks = usize::min(rayon::current_num_threads(), height.div_ceil(256));
+    let rows_per_chunk = height.div_ceil(num_chunks);
+    width * rows_per_chunk
+}
+
+/// Returns concatenated copies of the last row for each `indices` chunk.
+#[cfg(feature = "threads")]
+fn indices_prev_chunk_last_row(width: usize, chunk_size: usize, indices: &[u8]) -> Vec<u8> {
+    let mut prev_rows = indices
+        .chunks(chunk_size)
+        .map(|chunk| &chunk[(chunk.len() - width)..])
+        .collect::<Vec<_>>();
+
+    prev_rows.rotate_right(1);
+    prev_rows.concat()
 }
 
 #[cfg(test)]
