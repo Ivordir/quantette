@@ -226,13 +226,13 @@ fn arr_mul_assign<const N: usize>(arr: &mut [f32; N], alpha: f32, other: [f32; N
     }
 }
 
-/// Propogates, stores, and applies the dither error to the pixels.
+/// Propagates, stores, and applies the dither error to the pixels.
 struct ErrorBuf<'a, const N: usize> {
     /// The width of a row of pixels.
     width: usize,
-    /// The propogated error for the current row of pixels.
+    /// The propagated error for the current row of pixels.
     this_err: &'a mut [[f32; N]],
-    /// The propogated error for the next row of pixels.
+    /// The propagated error for the next row of pixels.
     next_err: &'a mut [[f32; N]],
 }
 
@@ -250,7 +250,7 @@ impl<'a, const N: usize> ErrorBuf<'a, N> {
 
     /// Propagate error using floyd steinberg dithering, going from left to right.
     #[inline]
-    fn propogate_ltr(&mut self, i: usize, err: [f32; N]) {
+    fn propagate_ltr(&mut self, i: usize, err: [f32; N]) {
         arr_mul_add_assign(&mut self.this_err[i + 2], 7.0 / 16.0, err);
         arr_mul_add_assign(&mut self.next_err[i], 3.0 / 16.0, err);
         arr_mul_add_assign(&mut self.next_err[i + 1], 5.0 / 16.0, err);
@@ -259,14 +259,14 @@ impl<'a, const N: usize> ErrorBuf<'a, N> {
 
     /// Propagate error using floyd steinberg dithering, going from right to left.
     #[inline]
-    fn propogate_rtl(&mut self, i: usize, err: [f32; N]) {
+    fn propagate_rtl(&mut self, i: usize, err: [f32; N]) {
         arr_mul_add_assign(&mut self.this_err[i], 7.0 / 16.0, err);
         arr_mul_add_assign(&mut self.next_err[i + 2], 3.0 / 16.0, err);
         arr_mul_add_assign(&mut self.next_err[i + 1], 5.0 / 16.0, err);
         arr_mul_assign(&mut self.next_err[i], 1.0 / 16.0, err);
     }
 
-    /// Apply the accumlated error to this pixel.
+    /// Apply the accumulated error to this pixel.
     #[inline]
     fn apply(&self, i: usize, point: &mut [f32; N]) {
         let err = self.this_err[i + 1];
@@ -332,12 +332,12 @@ fn dither_indexed<Color, Component, const N: usize>(
         if row % 2 == 0 {
             for (i, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate() {
                 let err = dither_pixel(i, index, point, table, &mut error, diffusion);
-                error.propogate_ltr(i, err);
+                error.propagate_ltr(i, err);
             }
         } else {
             for (i, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate().rev() {
                 let err = dither_pixel(i, index, point, table, &mut error, diffusion);
-                error.propogate_rtl(i, err);
+                error.propagate_rtl(i, err);
             }
         }
 
@@ -366,12 +366,12 @@ fn dither<Color, Component, const N: usize>(
         if row % 2 == 0 {
             for (i, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
                 let err = dither_pixel(i, index, og.map(Into::into), table, &mut error, diffusion);
-                error.propogate_ltr(i, err);
+                error.propagate_ltr(i, err);
             }
         } else {
             for (i, (index, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
                 let err = dither_pixel(i, index, og.map(Into::into), table, &mut error, diffusion);
-                error.propogate_rtl(i, err);
+                error.propagate_rtl(i, err);
             }
         }
 
@@ -504,7 +504,7 @@ impl FloydSteinberg {
                             &mut error,
                             diffusion,
                         );
-                        error.propogate_rtl(i, err);
+                        error.propagate_rtl(i, err);
                     }
 
                     error.next_row();
@@ -575,7 +575,7 @@ impl FloydSteinberg {
                             &mut error,
                             diffusion,
                         );
-                        error.propogate_rtl(i, err);
+                        error.propagate_rtl(i, err);
                     }
 
                     error.next_row();
