@@ -226,40 +226,61 @@ fn arr_mul_assign<const N: usize>(arr: &mut [f32; N], alpha: f32, other: &[f32; 
     }
 }
 
-/// Propagate error using floyd steinberg dithering, going from left to right.
-#[inline]
-fn propogate_error_ltr<const N: usize>(
-    i: usize,
-    error1: &mut [[f32; N]],
-    error2: &mut [[f32; N]],
-    err: &[f32; N],
-) {
-    arr_mul_add_assign(&mut error1[i + 2], 7.0 / 16.0, err);
-    arr_mul_add_assign(&mut error2[i], 3.0 / 16.0, err);
-    arr_mul_add_assign(&mut error2[i + 1], 5.0 / 16.0, err);
-    arr_mul_assign(&mut error2[i + 2], 1.0 / 16.0, err);
+/// Propogates, stores, and applies the dither error to the pixels.
+struct ErrorBuf<'a, const N: usize> {
+    /// The width of a row of pixels.
+    width: usize,
+    /// The propogated error for the current row of pixels.
+    this_err: &'a mut [[f32; N]],
+    /// The propogated error for the next row of pixels.
+    next_err: &'a mut [[f32; N]],
 }
 
-/// Propagate error using floyd steinberg dithering, going from right to left.
-#[inline]
-fn propogate_error_rtl<const N: usize>(
-    i: usize,
-    error1: &mut [[f32; N]],
-    error2: &mut [[f32; N]],
-    err: &[f32; N],
-) {
-    arr_mul_add_assign(&mut error1[i], 7.0 / 16.0, err);
-    arr_mul_add_assign(&mut error2[i + 2], 3.0 / 16.0, err);
-    arr_mul_add_assign(&mut error2[i + 1], 5.0 / 16.0, err);
-    arr_mul_assign(&mut error2[i], 1.0 / 16.0, err);
-}
+impl<'a, const N: usize> ErrorBuf<'a, N> {
+    /// Create the backing buffer for a new `ErrorBuf`.
+    fn new_buf(width: usize) -> Vec<[f32; N]> {
+        vec![[0.0; N]; 2 * (width + 2)]
+    }
 
-/// Apply the accumlated error to this pixel.
-#[inline]
-fn apply_error<const N: usize>(point: &mut [f32; N], i: usize, error1: &[[f32; N]]) {
-    let err = error1[i + 1];
-    for i in 0..N {
-        point[i] += err[i];
+    /// Create a new `ErrorBuf` using the given `buf`
+    fn new(width: usize, buf: &'a mut [[f32; N]]) -> Self {
+        let (err1, err2) = buf.split_at_mut(width + 2);
+        Self { width, this_err: err1, next_err: err2 }
+    }
+
+    /// Propagate error using floyd steinberg dithering, going from left to right.
+    #[inline]
+    fn propogate_ltr(&mut self, i: usize, err: &[f32; N]) {
+        arr_mul_add_assign(&mut self.this_err[i + 2], 7.0 / 16.0, err);
+        arr_mul_add_assign(&mut self.next_err[i], 3.0 / 16.0, err);
+        arr_mul_add_assign(&mut self.next_err[i + 1], 5.0 / 16.0, err);
+        arr_mul_assign(&mut self.next_err[i + 2], 1.0 / 16.0, err);
+    }
+
+    /// Propagate error using floyd steinberg dithering, going from right to left.
+    #[inline]
+    fn propogate_rtl(&mut self, i: usize, err: &[f32; N]) {
+        arr_mul_add_assign(&mut self.this_err[i], 7.0 / 16.0, err);
+        arr_mul_add_assign(&mut self.next_err[i + 2], 3.0 / 16.0, err);
+        arr_mul_add_assign(&mut self.next_err[i + 1], 5.0 / 16.0, err);
+        arr_mul_assign(&mut self.next_err[i], 1.0 / 16.0, err);
+    }
+
+    /// Apply the accumlated error to this pixel.
+    #[inline]
+    fn apply(&self, i: usize, point: &mut [f32; N]) {
+        let err = self.this_err[i + 1];
+        for i in 0..N {
+            point[i] += err[i];
+        }
+    }
+
+    /// Reset and swap the error buffers for the next row of pixels.
+    #[inline]
+    fn next_row(&mut self) {
+        std::mem::swap(&mut self.this_err, &mut self.next_err);
+        self.next_err[1] = [0.0; N];
+        self.next_err[self.width] = [0.0; N];
     }
 }
 
@@ -291,8 +312,8 @@ impl FloydSteinberg {
 
         let original_colors = original_colors.as_arrays();
 
-        let mut error = vec![[0.0; N]; 2 * (width + 2)];
-        let (mut error1, mut error2) = error.split_at_mut(width + 2);
+        let mut error = ErrorBuf::new_buf(width);
+        let mut error = ErrorBuf::new(width, &mut error);
         let mut pixel_row = vec![[0.0; N]; width];
 
         for (row, (indices, colors)) in indices
@@ -305,34 +326,26 @@ impl FloydSteinberg {
             }
 
             if row % 2 == 0 {
-                for (x, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate() {
+                for (i, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate() {
                     let mut point = point;
-                    apply_error(&mut point, x, error1);
-
+                    error.apply(i, &mut point);
                     let (nearest_index, nearest_point) = table.nearest_neighbor(*index, point);
-
                     *index = nearest_index;
                     let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                    propogate_error_ltr(x, error1, error2, &err);
+                    error.propogate_ltr(i, &err);
                 }
             } else {
-                for (x, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate().rev() {
+                for (i, (index, &point)) in indices.iter_mut().zip(&pixel_row).enumerate().rev() {
                     let mut point = point;
-                    apply_error(&mut point, x, error1);
-
+                    error.apply(i, &mut point);
                     let (nearest_index, nearest_point) = table.nearest_neighbor(*index, point);
-
                     *index = nearest_index;
                     let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                    propogate_error_rtl(x, error1, error2, &err);
+                    error.propogate_rtl(i, &err);
                 }
             }
 
-            std::mem::swap(&mut error1, &mut error2);
-            error2[1] = [0.0; N];
-            error2[width] = [0.0; N];
+            error.next_row();
         }
     }
 
@@ -358,8 +371,8 @@ impl FloydSteinberg {
 
         let table = DistanceTable::new(palette);
 
-        let mut error = vec![[0.0; N]; 2 * (width + 2)];
-        let (mut error1, mut error2) = error.split_at_mut(width + 2);
+        let mut error = ErrorBuf::new_buf(width);
+        let mut error = ErrorBuf::new(width, &mut error);
 
         for (row, (indices, colors)) in indices
             .chunks_exact_mut(width)
@@ -367,34 +380,26 @@ impl FloydSteinberg {
             .enumerate()
         {
             if row % 2 == 0 {
-                for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
+                for (i, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
                     let mut point = og.map(Into::into);
-                    apply_error(&mut point, x, error1);
-
+                    error.apply(i, &mut point);
                     let (nearest_index, nearest_point) = table.nearest_neighbor(*index, point);
-
                     *index = nearest_index;
                     let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                    propogate_error_ltr(x, error1, error2, &err);
+                    error.propogate_ltr(i, &err);
                 }
             } else {
-                for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
+                for (i, (index, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
                     let mut point = og.map(Into::into);
-                    apply_error(&mut point, x, error1);
-
+                    error.apply(i, &mut point);
                     let (nearest_index, nearest_point) = table.nearest_neighbor(*index, point);
-
                     *index = nearest_index;
                     let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                    propogate_error_rtl(x, error1, error2, &err);
+                    error.propogate_rtl(i, &err);
                 }
             }
 
-            std::mem::swap(&mut error1, &mut error2);
-            error2[1] = [0.0; N];
-            error2[width] = [0.0; N];
+            error.next_row();
         }
     }
 }
@@ -446,35 +451,30 @@ impl FloydSteinberg {
         indices
             .par_chunks_mut(chunk_size)
             .enumerate()
-            .for_each(|(i, indices)| {
-                let chunk_start = i * chunk_size;
+            .for_each(|(chunk_i, indices)| {
+                let chunk_start = chunk_i * chunk_size;
 
-                let mut error = vec![[0.0; N]; 2 * (w + 2)];
-                let (mut error1, mut error2) = error.split_at_mut(w + 2);
+                let mut error = ErrorBuf::new_buf(w);
+                let mut error = ErrorBuf::new(w, &mut error);
                 let mut pixel_row = vec![[0.0; N]; w];
 
-                if i > 0 {
-                    let prev_row = &indices_prev_chunk_last_row[((i - 1) * w)..(i * w)];
+                if chunk_i > 0 {
+                    let prev_row = &indices_prev_chunk_last_row[((chunk_i - 1) * w)..(chunk_i * w)];
                     let colors = &original_indices[(chunk_start - w)..chunk_start];
 
                     for (d, &s) in pixel_row.iter_mut().zip(colors) {
                         *d = original_colors[s as usize].map(Into::into);
                     }
 
-                    for (x, (&index, &og)) in prev_row.iter().zip(&pixel_row).enumerate().rev() {
+                    for (i, (&index, &og)) in prev_row.iter().zip(&pixel_row).enumerate().rev() {
                         let mut point = og.map(Into::into);
-                        apply_error(&mut point, x, error1);
-
+                        error.apply(i, &mut point);
                         let (_, nearest_point) = table.nearest_neighbor(index, point);
-
                         let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                        propogate_error_rtl(x, error1, error2, &err);
+                        error.propogate_rtl(i, &err);
                     }
 
-                    std::mem::swap(&mut error1, &mut error2);
-                    error2[1] = [0.0; N];
-                    error2[w] = [0.0; N];
+                    error.next_row();
                 }
 
                 let original_indices = &original_indices
@@ -490,37 +490,34 @@ impl FloydSteinberg {
                     }
 
                     if row % 2 == 0 {
-                        for (x, (index, &og)) in indices.iter_mut().zip(&pixel_row).enumerate() {
+                        for (i, (index, &og)) in indices.iter_mut().zip(&pixel_row).enumerate() {
                             let mut point = og.map(Into::into);
-                            apply_error(&mut point, x, error1);
+                            error.apply(i, &mut point);
 
                             let (nearest_index, nearest_point) =
                                 table.nearest_neighbor(*index, point);
 
                             *index = nearest_index;
                             let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-                            propogate_error_ltr(x, error1, error2, &err);
+                            error.propogate_ltr(i, &err);
                         }
                     } else {
-                        for (x, (index, &og)) in
+                        for (i, (index, &og)) in
                             indices.iter_mut().zip(&pixel_row).enumerate().rev()
                         {
                             let mut point = og.map(Into::into);
-                            apply_error(&mut point, x, error1);
+                            error.apply(i, &mut point);
 
                             let (nearest_index, nearest_point) =
                                 table.nearest_neighbor(*index, point);
 
                             *index = nearest_index;
                             let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                            propogate_error_rtl(x, error1, error2, &err);
+                            error.propogate_rtl(i, &err);
                         }
                     }
 
-                    std::mem::swap(&mut error1, &mut error2);
-                    error2[1] = [0.0; N];
-                    error2[w] = [0.0; N];
+                    error.next_row();
                 }
             });
     }
@@ -565,30 +562,25 @@ impl FloydSteinberg {
         indices
             .par_chunks_mut(chunk_size)
             .enumerate()
-            .for_each(|(i, indices)| {
-                let chunk_start = i * chunk_size;
+            .for_each(|(chunk_i, indices)| {
+                let chunk_start = chunk_i * chunk_size;
 
-                let mut error = vec![[0.0; N]; 2 * (w + 2)];
-                let (mut error1, mut error2) = error.split_at_mut(w + 2);
+                let mut error = ErrorBuf::new_buf(w);
+                let mut error = ErrorBuf::new(w, &mut error);
 
-                if i > 0 {
-                    let prev_row = &indices_prev_chunk_last_row[((i - 1) * w)..(i * w)];
+                if chunk_i > 0 {
+                    let prev_row = &indices_prev_chunk_last_row[((chunk_i - 1) * w)..(chunk_i * w)];
                     let colors = original_colors[(chunk_start - w)..chunk_start].as_arrays();
 
-                    for (x, (&index, &og)) in prev_row.iter().zip(colors).enumerate().rev() {
+                    for (i, (&index, &og)) in prev_row.iter().zip(colors).enumerate().rev() {
                         let mut point = og.map(Into::into);
-                        apply_error(&mut point, x, error1);
-
+                        error.apply(i, &mut point);
                         let (_, nearest_point) = table.nearest_neighbor(index, point);
-
                         let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                        propogate_error_rtl(x, error1, error2, &err);
+                        error.propogate_rtl(i, &err);
                     }
 
-                    std::mem::swap(&mut error1, &mut error2);
-                    error2[1] = [0.0; N];
-                    error2[w] = [0.0; N];
+                    error.next_row();
                 }
 
                 let original_colors = &original_colors
@@ -600,36 +592,32 @@ impl FloydSteinberg {
                     .enumerate()
                 {
                     if row % 2 == 0 {
-                        for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
+                        for (i, (index, &og)) in indices.iter_mut().zip(colors).enumerate() {
                             let mut point = og.map(Into::into);
-                            apply_error(&mut point, x, error1);
+                            error.apply(i, &mut point);
 
                             let (nearest_index, nearest_point) =
                                 table.nearest_neighbor(*index, point);
 
                             *index = nearest_index;
                             let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                            propogate_error_ltr(x, error1, error2, &err);
+                            error.propogate_ltr(i, &err);
                         }
                     } else {
-                        for (x, (index, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
+                        for (i, (index, &og)) in indices.iter_mut().zip(colors).enumerate().rev() {
                             let mut point = og.map(Into::into);
-                            apply_error(&mut point, x, error1);
+                            error.apply(i, &mut point);
 
                             let (nearest_index, nearest_point) =
                                 table.nearest_neighbor(*index, point);
 
                             *index = nearest_index;
                             let err = array::from_fn(|i| diffusion * (point[i] - nearest_point[i]));
-
-                            propogate_error_rtl(x, error1, error2, &err);
+                            error.propogate_rtl(i, &err);
                         }
                     }
 
-                    std::mem::swap(&mut error1, &mut error2);
-                    error2[1] = [0.0; N];
-                    error2[w] = [0.0; N];
+                    error.next_row();
                 }
             });
     }
