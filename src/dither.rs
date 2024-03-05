@@ -42,7 +42,7 @@ impl FloydSteinberg {
 
     /// Gets the error diffusion factor for this [`FloydSteinberg`].
     #[must_use]
-    pub fn error_diffusion(&self) -> f32 {
+    pub const fn error_diffusion(&self) -> f32 {
         self.0
     }
 }
@@ -279,7 +279,7 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N>,
         Component: Copy + Into<f32>,
     {
-        let FloydSteinberg(diffusion) = *self;
+        let &FloydSteinberg(diffusion) = self;
 
         if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
             return;
@@ -348,7 +348,7 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N>,
         Component: Copy + Into<f32>,
     {
-        let FloydSteinberg(diffusion) = *self;
+        let &FloydSteinberg(diffusion) = self;
 
         if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
             return;
@@ -416,7 +416,7 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N> + Sync,
         Component: Copy + Into<f32> + Sync,
     {
-        let FloydSteinberg(diffusion) = *self;
+        let &FloydSteinberg(diffusion) = self;
 
         if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
             return;
@@ -427,7 +427,7 @@ impl FloydSteinberg {
         let w = width as usize;
         let h = height as usize;
 
-        let num_chunks = usize::min(rayon::current_num_threads(), height.div_ceil(256) as usize);
+        let num_chunks = usize::min(rayon::current_num_threads(), h.div_ceil(256));
         let rows_per_chunk = h.div_ceil(num_chunks);
         let chunk_size = w * rows_per_chunk;
 
@@ -537,7 +537,7 @@ impl FloydSteinberg {
         Color: ColorComponents<Component, N> + Sync,
         Component: Copy + Into<f32>,
     {
-        let FloydSteinberg(diffusion) = *self;
+        let &FloydSteinberg(diffusion) = self;
 
         if palette.is_empty() || diffusion == 0.0 || width * height == 0 {
             return;
@@ -548,7 +548,7 @@ impl FloydSteinberg {
         let w = width as usize;
         let h = height as usize;
 
-        let num_chunks = usize::min(rayon::current_num_threads(), height.div_ceil(256) as usize);
+        let num_chunks = usize::min(rayon::current_num_threads(), h.div_ceil(256));
         let rows_per_chunk = h.div_ceil(num_chunks);
         let chunk_size = w * rows_per_chunk;
 
