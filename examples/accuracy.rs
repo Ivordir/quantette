@@ -101,7 +101,7 @@ struct Report {
     #[arg(short, long, default_value = "16,64,256", value_delimiter = ',', value_parser = parse_palette_size)]
     k: Vec<PaletteSize>,
 
-    #[arg(long, default_value_t = 0.5)]
+    #[arg(short = 'f', long, default_value_t = 0.5)]
     sampling_factor: f64,
 
     #[arg(long, default_value_t = 4096)]
@@ -534,41 +534,44 @@ fn report(options: Report) {
             });
         }
         (Algorithm::Exoquant, ColorSpace::Srgb) => {
+            use exoquant::{convert_to_indexed, ditherer, optimizer, Color};
+
             each_image(&options, images, max_name_len, |image| {
                 let pixels = image
                     .pixels()
-                    .map(|p| exoquant::Color::new(p.0[0], p.0[1], p.0[2], u8::MAX))
+                    .map(|p| Color::new(p.0[0], p.0[1], p.0[2], u8::MAX))
                     .collect::<Vec<_>>();
 
                 move |k| {
+                    let k = k.into_inner().into();
                     let (colors, indices) = match (options.kmeans_optimize, options.dither) {
-                        (true, true) => exoquant::convert_to_indexed(
+                        (true, true) => convert_to_indexed(
                             &pixels,
                             image.width() as usize,
-                            k.into_inner().into(),
-                            &exoquant::optimizer::KMeans,
-                            &exoquant::ditherer::FloydSteinberg::new(),
+                            k,
+                            &optimizer::KMeans,
+                            &ditherer::FloydSteinberg::new(),
                         ),
-                        (true, false) => exoquant::convert_to_indexed(
+                        (true, false) => convert_to_indexed(
                             &pixels,
                             image.width() as usize,
-                            k.into_inner().into(),
-                            &exoquant::optimizer::KMeans,
-                            &exoquant::ditherer::None,
+                            k,
+                            &optimizer::KMeans,
+                            &ditherer::None,
                         ),
-                        (false, true) => exoquant::convert_to_indexed(
+                        (false, true) => convert_to_indexed(
                             &pixels,
                             image.width() as usize,
-                            k.into_inner().into(),
-                            &exoquant::optimizer::None,
-                            &exoquant::ditherer::FloydSteinberg::new(),
+                            k,
+                            &optimizer::None,
+                            &ditherer::FloydSteinberg::new(),
                         ),
-                        (false, false) => exoquant::convert_to_indexed(
+                        (false, false) => convert_to_indexed(
                             &pixels,
                             image.width() as usize,
-                            k.into_inner().into(),
-                            &exoquant::optimizer::None,
-                            &exoquant::ditherer::None,
+                            k,
+                            &optimizer::None,
+                            &ditherer::None,
                         ),
                     };
 
