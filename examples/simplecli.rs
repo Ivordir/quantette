@@ -69,7 +69,7 @@ enum Quantizer {
         #[arg(long, default_value_t = FloydSteinberg::DEFAULT_ERROR_DIFFUSION)]
         dither_error_diffusion: f32,
 
-        #[arg(long, default_value_t = 0.5)]
+        #[arg(short = 'f', long, default_value_t = 0.5)]
         sampling_factor: f32,
 
         #[arg(long, default_value_t = 4096)]
@@ -89,7 +89,7 @@ enum Quantizer {
         #[arg(short, long)]
         quality: Option<u8>,
 
-        #[arg(long, default_value_t = 1.0)]
+        #[arg(short, long, default_value_t = 0.0)]
         dither_level: f32,
 
         #[arg(short, long, default_value_t = 0)]
@@ -214,31 +214,42 @@ fn main() {
             }
         }
         Quantizer::Neuquant { sample_frac } => {
+            use color_quant::NeuQuant;
+
             let image = image.into_rgba8();
 
-            let nq = log!(
-                "quantization",
-                color_quant::NeuQuant::new(sample_frac.into(), k.into_inner().into(), &image)
-            );
-
-            let colors = nq
-                .color_map_rgba()
-                .chunks_exact(4)
-                .map(|c| Srgb::new(c[0], c[1], c[2]))
-                .collect();
-
             if let Some(output) = output {
-                let indices = log!(
-                    "remapping",
-                    image
+                let (nq, indices) = log!("quantization and remapping", {
+                    let nq = NeuQuant::new(sample_frac.into(), k.into_inner().into(), &image);
+
+                    let indices = image
                         .chunks_exact(4)
                         .map(|pix| nq.index_of(pix) as u8)
-                        .collect()
-                );
+                        .collect();
+
+                    (nq, indices)
+                });
+
+                let colors = nq
+                    .color_map_rgba()
+                    .chunks_exact(4)
+                    .map(|c| Srgb::new(c[0], c[1], c[2]))
+                    .collect();
 
                 let image = indexed_image(image.dimensions(), colors, indices);
                 log!("write image", image.save(output).unwrap())
             } else {
+                let nq = log!(
+                    "quantization",
+                    NeuQuant::new(sample_frac.into(), k.into_inner().into(), &image)
+                );
+
+                let colors = nq
+                    .color_map_rgba()
+                    .chunks_exact(4)
+                    .map(|c| Srgb::new(c[0], c[1], c[2]))
+                    .collect();
+
                 print_palette(colors)
             }
         }
@@ -267,22 +278,23 @@ fn main() {
                     libq.set_max_colors(k.into_inner().into()).unwrap();
                 }
 
-                let mut quantized = log!("quantization", libq.quantize(&mut img).unwrap());
-
                 if let Some(output) = output {
-                    let (colors, indices) = log!("remapping", {
+                    let (colors, indices) = log!("quantization and remapping", {
+                        let mut quantized = libq.quantize(&mut img).unwrap();
                         quantized.set_dithering_level(dither_level).unwrap();
                         quantized.remapped(&mut img).unwrap()
                     });
 
                     let colors = colors
-                        .into_par_iter()
+                        .into_iter()
                         .map(|c| Srgb::new(c.r, c.g, c.b))
                         .collect();
 
                     let image = indexed_image(image.dimensions(), colors, indices);
                     log!("write image", image.save(output).unwrap())
                 } else {
+                    let mut quantized = log!("quantization", libq.quantize(&mut img).unwrap());
+
                     let colors = quantized
                         .palette()
                         .iter()
@@ -294,11 +306,15 @@ fn main() {
             })
         }
         Quantizer::Exoquant { kmeans, dither } => {
+            use exoquant::{
+                convert_to_indexed, ditherer, generate_palette, optimizer, Color, SimpleColorSpace,
+            };
+
             let image = image.into_rgba8();
 
             let pixels = image
                 .pixels()
-                .map(|p| exoquant::Color::new(p.0[0], p.0[1], p.0[2], p.0[3]))
+                .map(|p| Color::new(p.0[0], p.0[1], p.0[2], p.0[3]))
                 .collect::<Vec<_>>();
 
             let width = image.width() as usize;
@@ -309,34 +325,29 @@ fn main() {
                 let (colors, indices) = log!(
                     "quantization and remapping",
                     match (kmeans, dither) {
-                        (true, true) => exoquant::convert_to_indexed(
+                        (true, true) => convert_to_indexed(
                             &pixels,
                             width,
                             k,
-                            &exoquant::optimizer::KMeans,
-                            &exoquant::ditherer::FloydSteinberg::new(),
+                            &optimizer::KMeans,
+                            &ditherer::FloydSteinberg::new(),
                         ),
-                        (true, false) => exoquant::convert_to_indexed(
+                        (true, false) => convert_to_indexed(
                             &pixels,
                             width,
                             k,
-                            &exoquant::optimizer::KMeans,
-                            &exoquant::ditherer::None,
+                            &optimizer::KMeans,
+                            &ditherer::None,
                         ),
-                        (false, true) => exoquant::convert_to_indexed(
+                        (false, true) => convert_to_indexed(
                             &pixels,
                             width,
                             k,
-                            &exoquant::optimizer::None,
-                            &exoquant::ditherer::FloydSteinberg::new(),
+                            &optimizer::None,
+                            &ditherer::FloydSteinberg::new(),
                         ),
-                        (false, false) => exoquant::convert_to_indexed(
-                            &pixels,
-                            width,
-                            k,
-                            &exoquant::optimizer::None,
-                            &exoquant::ditherer::None,
-                        ),
+                        (false, false) =>
+                            convert_to_indexed(&pixels, width, k, &optimizer::None, &ditherer::None),
                     }
                 );
 
@@ -351,17 +362,17 @@ fn main() {
                 let colors = log!(
                     "quantization",
                     if kmeans {
-                        exoquant::generate_palette(
+                        generate_palette(
                             &pixels.into_iter().collect(),
-                            &exoquant::SimpleColorSpace::default(),
-                            &exoquant::optimizer::KMeans,
+                            &SimpleColorSpace::default(),
+                            &optimizer::KMeans,
                             k,
                         )
                     } else {
-                        exoquant::generate_palette(
+                        generate_palette(
                             &pixels.into_iter().collect(),
-                            &exoquant::SimpleColorSpace::default(),
-                            &exoquant::optimizer::None,
+                            &SimpleColorSpace::default(),
+                            &optimizer::None,
                             k,
                         )
                     }
