@@ -29,8 +29,7 @@ impl FloydSteinberg {
     ///
     /// For example, a factor of `1.0` diffuses all of the error to the neighboring pixels.
     ///
-    /// # Errors
-    /// Returns `None` if `error_diffusion` in not in the range `0.0..=1.0`.
+    /// This will return `None` if `error_diffusion` is not in the range `0.0..=1.0`.
     #[must_use]
     pub fn with_error_diffusion(error_diffusion: f32) -> Option<Self> {
         if (0.0..=1.0).contains(&error_diffusion) {

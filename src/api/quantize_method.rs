@@ -75,6 +75,8 @@ impl<Color> KmeansOptions<Color> {
     /// Sets the sampling factor which controls what percentage of the image/unique colors to sample.
     ///
     /// The default sampling factor is `0.5`, that is, to sample half of the input.
+    ///
+    /// Negative or `NAN` sampling factors will cause k-means to not be run.
     #[must_use]
     pub fn sampling_factor(mut self, sampling_factor: f32) -> Self {
         self.sampling_factor = sampling_factor;
