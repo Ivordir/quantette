@@ -160,7 +160,7 @@ impl<'a> ImagePipeline<'a> {
     ///
     /// The default palette size is [`PaletteSize::MAX`].
     #[must_use]
-    pub fn palette_size<T: Into<PaletteSize>>(mut self, size: T) -> Self {
+    pub fn palette_size(mut self, size: impl Into<PaletteSize>) -> Self {
         self.k = size.into();
         self
     }
@@ -184,10 +184,7 @@ impl<'a> ImagePipeline<'a> {
     /// The default quantization method is [`QuantizeMethod::Wu`].
     #[must_use]
     #[cfg(feature = "kmeans")]
-    pub fn quantize_method<T: Into<QuantizeMethod<Srgb<u8>>>>(
-        mut self,
-        quantize_method: T,
-    ) -> Self {
+    pub fn quantize_method(mut self, quantize_method: impl Into<QuantizeMethod<Srgb<u8>>>) -> Self {
         self.quantize_method = quantize_method.into();
         self
     }
