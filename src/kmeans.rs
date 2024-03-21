@@ -275,11 +275,9 @@ where
         for _ in 0..(samples / BATCH) {
             batch.extend((0..BATCH).map(|_| colors[distribution.sample(rng)]));
 
-            for &color in &batch {
+            for color in batch.drain(..) {
                 self.add_sample(color);
             }
-
-            batch.clear();
         }
 
         batch.extend((0..(samples % BATCH)).map(|_| colors[distribution.sample(rng)]));
