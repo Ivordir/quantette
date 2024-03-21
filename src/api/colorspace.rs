@@ -158,6 +158,7 @@ impl QuantizeMethod<Srgb<u8>> {
                 sampling_factor,
                 initial_centroids,
                 seed,
+                #[cfg(feature = "threads")]
                 batch_size,
             }) => QuantizeMethod::Kmeans(KmeansOptions {
                 initial_centroids: initial_centroids.map(|c| {
@@ -165,6 +166,7 @@ impl QuantizeMethod<Srgb<u8>> {
                 }),
                 sampling_factor,
                 seed,
+                #[cfg(feature = "threads")]
                 batch_size,
             }),
         }

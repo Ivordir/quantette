@@ -48,7 +48,7 @@ pub struct KmeansOptions<Color> {
     /// The seed value for the random number generator.
     pub(crate) seed: u64,
     /// The batch size for minibatch k-means.
-    #[allow(unused)]
+    #[cfg(feature = "threads")]
     pub(crate) batch_size: u32,
 }
 
@@ -68,6 +68,7 @@ impl<Color> KmeansOptions<Color> {
             sampling_factor: 0.5,
             initial_centroids: None,
             seed: 0,
+            #[cfg(feature = "threads")]
             batch_size: 4096,
         }
     }
