@@ -243,15 +243,8 @@ where
         #[allow(clippy::cast_possible_truncation)]
         let rate = (1.0 / f64::from(count).sqrt()) as f32; // learning rate of 0.5 => count^(-0.5)
 
-        let mut center = components[chunk].map(|v| v.as_array_ref()[lane]);
-        for c in 0..N {
-            center[c] += rate * (color[c] - center[c]);
-        }
-
-        for (d, s) in components[chunk].iter_mut().zip(center) {
-            #[allow(unsafe_code)]
-            let d = unsafe { &mut *(d as *mut f32x8).cast::<[f32; 8]>() };
-            d[lane] = s;
+        for (d, c) in components[chunk].iter_mut().zip(color) {
+            d.as_array_mut()[lane] += rate * (c - d.as_array_ref()[lane]);
         }
 
         counts[i] = count;
@@ -472,12 +465,8 @@ where
                 #[allow(clippy::cast_possible_truncation)]
                 let rate = (1.0 / f64::from(count).sqrt()) as f32; // learning rate of 0.5 => count^(-0.5)
 
-                #[allow(unsafe_code)]
-                let centroid = unsafe {
-                    &mut *std::ptr::addr_of_mut!(components[chunk]).cast::<[[f32; 8]; N]>()
-                };
-                for c in 0..N {
-                    centroid[c][lane] += rate * (color[c] - centroid[c][lane]);
+                for (d, c) in components[chunk].iter_mut().zip(color) {
+                    d.as_array_mut()[lane] += rate * (c - d.as_array_ref()[lane]);
                 }
 
                 counts[i] = count;
