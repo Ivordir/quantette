@@ -227,13 +227,10 @@ where
         }
     }
 
-    /// Adds the given color sample to its nearest centroid.
+    /// Adds the given color to the centroid at the given chunk and lane.
     #[inline]
-    fn add_sample(&mut self, color: [Component; N]) {
+    fn add_sample_to(&mut self, chunk: u8, lane: u8, color: [f32; N]) {
         let Self { components, counts, .. } = self;
-        let color = color.map(Into::into);
-
-        let (chunk, lane) = simd_argmin(components, color);
 
         let chunk = usize::from(chunk);
         let lane = usize::from(lane);
@@ -248,6 +245,14 @@ where
         }
 
         counts[i] = count;
+    }
+
+    /// Adds the given color sample to its nearest centroid.
+    #[inline]
+    fn add_sample(&mut self, color: [Component; N]) {
+        let color = color.map(Into::into);
+        let (chunk, lane) = simd_argmin(&self.components, color);
+        self.add_sample_to(chunk, lane, color);
     }
 
     /// Runs online k-means using the given `distribution`.
@@ -426,10 +431,6 @@ where
         #[repr(align(64))]
         struct Align64<T>(T);
 
-        let Self { components, counts, color_counts, .. } = self;
-
-        let colors = color_counts.color_components();
-
         let threads = rayon::current_num_threads();
         let chunk_size = (batch_size as usize).div_ceil(threads);
 
@@ -439,6 +440,8 @@ where
 
         let mut batch = vec![[0.0.as_(); N]; batch_size as usize];
         let mut assignments = vec![(0, 0); batch_size as usize];
+
+        let colors = self.color_counts.color_components();
 
         for _ in 0..(max_samples / batch_size) {
             batch
@@ -451,25 +454,12 @@ where
                     }
 
                     for (color, center) in batch.iter().zip(assignments) {
-                        *center = simd_argmin(components, color.map(Into::into));
+                        *center = simd_argmin(&self.components, color.map(Into::into));
                     }
                 });
 
             for (color, &(chunk, lane)) in batch.iter().zip(&assignments) {
-                let color = color.map(Into::into);
-                let chunk = usize::from(chunk);
-                let lane = usize::from(lane);
-                let i = chunk * 8 + lane;
-
-                let count = counts[i] + 1;
-                #[allow(clippy::cast_possible_truncation)]
-                let rate = (1.0 / f64::from(count).sqrt()) as f32; // learning rate of 0.5 => count^(-0.5)
-
-                for (d, c) in components[chunk].iter_mut().zip(color) {
-                    d.as_array_mut()[lane] += rate * (c - d.as_array_ref()[lane]);
-                }
-
-                counts[i] = count;
+                self.add_sample_to(chunk, lane, color.map(Into::into));
             }
         }
     }
