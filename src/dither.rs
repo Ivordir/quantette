@@ -188,8 +188,7 @@ impl<const N: usize> DistanceTable<N> {
             .reduce(|a, b| a + b)
             .unwrap();
 
-            #[allow(unsafe_code)]
-            let mask: u32x8 = unsafe { std::mem::transmute(distance.cmp_le(min_distance)) };
+            let mask = u32x8::new(distance.cmp_le(min_distance).to_array().map(f32::to_bits));
             min_neighbor = mask.blend(neighbor, min_neighbor);
             min_distance = min_distance.fast_min(distance);
         }

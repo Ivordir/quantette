@@ -147,8 +147,7 @@ fn simd_argmin<const N: usize>(points: &[[f32x8; N]], query: [f32; N]) -> (u8, u
         .reduce(|a, b| a + b)
         .unwrap();
 
-        #[allow(unsafe_code)]
-        let mask: u32x8 = unsafe { std::mem::transmute(distance.cmp_le(min_distance)) };
+        let mask = u32x8::new(distance.cmp_le(min_distance).to_array().map(f32::to_bits));
         min_chunk = mask.blend(cur_chunk, min_chunk);
         min_distance = min_distance.fast_min(distance);
         cur_chunk += incr;
