@@ -389,11 +389,11 @@ impl<'a> ImagePipeline<'a> {
             .collect::<Vec<_>>()
             .into_components();
 
-        #[allow(clippy::unwrap_used)]
+        #[allow(clippy::expect_used)]
         {
             // indices.len() will be equal to width * height,
             // so buf should be large enough by nature of its construction
-            RgbImage::from_vec(width, height, buf).unwrap()
+            RgbImage::from_vec(width, height, buf).expect("large enough buffer")
         }
     }
 }
@@ -531,11 +531,11 @@ impl<'a> ImagePipeline<'a> {
             .collect::<Vec<_>>()
             .into_components();
 
-        #[allow(clippy::unwrap_used)]
+        #[allow(clippy::expect_used)]
         {
             // indices.len() will be equal to width * height,
             // so buf should be large enough by nature of its construction
-            RgbImage::from_vec(width, height, buf).unwrap()
+            RgbImage::from_vec(width, height, buf).expect("large enough buffer")
         }
     }
 }

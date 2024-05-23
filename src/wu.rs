@@ -355,7 +355,6 @@ where
             for g in 0..B {
                 let mut line = Stats::zero();
 
-                #[allow(clippy::needless_range_loop)]
                 for b in 0..B {
                     line += hist[[r, g, b]];
                     area[b] += line;
@@ -473,8 +472,8 @@ where
 
         while queue.len() < k {
             // there should always be one cube, since at least one cube is added back for each popped
-            #[allow(clippy::unwrap_used)]
-            let CubeVar(mut cube1, variance) = queue.pop().unwrap();
+            #[allow(clippy::expect_used)]
+            let CubeVar(mut cube1, variance) = queue.pop().expect("at least one cube");
 
             if variance <= 0.0 {
                 // all cubes cannot be cut further

@@ -258,8 +258,8 @@ where
         counts[0][usize::from(r)] += 1;
     }
 
-    #[allow(clippy::unwrap_used)]
-    let (counts, partial_counts) = counts.split_first_mut().unwrap();
+    #[allow(clippy::expect_used)]
+    let (counts, partial_counts) = counts.split_first_mut().expect("CHUNKS != 0");
     for i in 0..RADIX {
         for partial in &*partial_counts {
             counts[i] += partial[i];

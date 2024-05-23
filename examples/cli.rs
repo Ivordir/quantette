@@ -400,12 +400,9 @@ fn indexed_image(
         .collect::<Vec<_>>()
         .into_components();
 
-    #[allow(clippy::unwrap_used)]
-    {
-        // indices.len() will be equal to width * height,
-        // so buf should be large enough by nature of its construction
-        RgbImage::from_vec(width, height, buf).unwrap()
-    }
+    // indices.len() will be equal to width * height,
+    // so buf should be large enough by nature of its construction
+    RgbImage::from_vec(width, height, buf).unwrap()
 }
 
 fn print_palette(palette: Vec<Srgb<u8>>) {

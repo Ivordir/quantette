@@ -161,14 +161,14 @@ impl<const N: usize> DistanceTable<N> {
 
         let (mut min_neighbor, start_components) = components[row_start];
 
-        #[allow(clippy::unwrap_used)]
+        #[allow(clippy::expect_used)]
         let mut min_distance = array::from_fn::<_, N, _>(|i| {
             let diff = p[i] - start_components[i];
             diff * diff
         })
         .into_iter()
         .reduce(|a, b| a + b)
-        .unwrap();
+        .expect("N != 0");
 
         let dist = min_distance.as_array_ref()[0];
 
@@ -179,14 +179,14 @@ impl<const N: usize> DistanceTable<N> {
                 break;
             }
 
-            #[allow(clippy::unwrap_used)]
+            #[allow(clippy::expect_used)]
             let distance = array::from_fn::<_, N, _>(|i| {
                 let diff = p[i] - chunk[i];
                 diff * diff
             })
             .into_iter()
             .reduce(|a, b| a + b)
-            .unwrap();
+            .expect("N != 0");
 
             let mask = u32x8::new(distance.cmp_le(min_distance).to_array().map(f32::to_bits));
             min_neighbor = mask.blend(neighbor, min_neighbor);

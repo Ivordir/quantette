@@ -138,14 +138,14 @@ fn simd_argmin<const N: usize>(points: &[[f32x8; N]], query: [f32; N]) -> (u8, u
     let query = query.map(f32x8::splat);
 
     for chunk in points {
-        #[allow(clippy::unwrap_used)]
+        #[allow(clippy::expect_used)]
         let distance = array::from_fn::<_, N, _>(|i| {
             let diff = query[i] - chunk[i];
             diff * diff
         })
         .into_iter()
         .reduce(|a, b| a + b)
-        .unwrap();
+        .expect("N != 0");
 
         let mask = u32x8::new(distance.cmp_le(min_distance).to_array().map(f32::to_bits));
         min_chunk = mask.blend(cur_chunk, min_chunk);
@@ -285,7 +285,7 @@ where
     }
 
     /// Creates a new [`WeightedAliasIndex`] from the given `counts` data.
-    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::expect_used)]
     fn weighted_alias_index(counts: &[u32]) -> WeightedAliasIndex<u64> {
         // WeightedAliasIndex::new fails if:
         // - The vector is empty => should be handled by caller
@@ -295,7 +295,8 @@ where
         //      max count and max length are u32::MAX, so converting all counts to u64 will prevent this
         // - The sum of weights is zero =>
         //      ColorCounts implementors guarantee every count is > 0
-        WeightedAliasIndex::new(counts.iter().copied().map(u64::from).collect()).unwrap()
+        WeightedAliasIndex::new(counts.iter().copied().map(u64::from).collect())
+            .expect("WeightedAliasIndex creation should succeed")
     }
 
     /// Runs online k-means for the given number of samples.
@@ -823,7 +824,6 @@ mod tests {
         }
 
         for color in points {
-            #[allow(clippy::unwrap_used)]
             let expected = centroids
                 .iter()
                 .map(|&centroid| OrderedFloat(squared_euclidean_distance(centroid, color)))
