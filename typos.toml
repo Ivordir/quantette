@@ -1,5 +1,15 @@
 [files]
-extend-exclude = ["img/CQ100"]
+extend-exclude = [
+    ".git/",
+    "img/CQ100",
+]
+ignore-hidden = false
+
+[default]
+extend-ignore-re = [
+    "Jarrett Kow",
+]
 
 [default.extend-words]
 "colro" = "color"
+
