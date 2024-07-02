@@ -101,6 +101,7 @@ use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 /// # Ok(())
 /// # }
 /// ```
+#[must_use]
 #[derive(Debug, Clone)]
 pub struct ImagePipeline<'a> {
     /// The input image as a flat slice of pixels.
@@ -153,7 +154,6 @@ impl<'a> ImagePipeline<'a> {
     /// Sets the palette size which determines the (maximum) number of colors to have in the palette.
     ///
     /// The default palette size is [`PaletteSize::MAX`].
-    #[must_use]
     pub fn palette_size(mut self, size: impl Into<PaletteSize>) -> Self {
         self.k = size.into();
         self
@@ -164,7 +164,6 @@ impl<'a> ImagePipeline<'a> {
     /// See [`ColorSpace`] for more details.
     ///
     /// The default color space is [`ColorSpace::Srgb`].
-    #[must_use]
     #[cfg(feature = "colorspaces")]
     pub fn colorspace(mut self, colorspace: ColorSpace) -> Self {
         self.colorspace = colorspace;
@@ -176,7 +175,6 @@ impl<'a> ImagePipeline<'a> {
     /// See [`QuantizeMethod`] for more details.
     ///
     /// The default quantization method is [`QuantizeMethod::Wu`].
-    #[must_use]
     #[cfg(feature = "kmeans")]
     pub fn quantize_method(mut self, quantize_method: impl Into<QuantizeMethod<Srgb<u8>>>) -> Self {
         self.quantize_method = quantize_method.into();
@@ -192,7 +190,6 @@ impl<'a> ImagePipeline<'a> {
     /// (i.e., the k-means quantization method is chosen or a color space converision is needed).
     ///
     /// The default value is `true`.
-    #[must_use]
     #[cfg(any(feature = "colorspaces", feature = "kmeans"))]
     pub fn dedup_pixels(mut self, dedup_pixels: bool) -> Self {
         self.dedup_pixels = dedup_pixels;
@@ -206,7 +203,6 @@ impl<'a> ImagePipeline<'a> {
     /// [`ImagePipeline::dither_error_diffusion`].
     ///
     /// The default value is `true`.
-    #[must_use]
     pub fn dither(mut self, dither: bool) -> Self {
         self.dither = dither;
         self
@@ -220,7 +216,6 @@ impl<'a> ImagePipeline<'a> {
     /// otherwise the default error diffusion will be used as a fallback.
     ///
     /// The default value is [`FloydSteinberg::DEFAULT_ERROR_DIFFUSION`].
-    #[must_use]
     pub fn dither_error_diffusion(mut self, diffusion: f32) -> Self {
         self.dither_error_diffusion = diffusion;
         self
