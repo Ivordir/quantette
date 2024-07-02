@@ -40,7 +40,7 @@ use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 /// # use quantette::ImagePipeline;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let img = image::open("some image")?.into_rgb8();
-/// let pipeline = ImagePipeline::try_from(&img)?;
+/// let mut pipeline = ImagePipeline::try_from(&img)?;
 /// # Ok(())
 /// # }
 /// ```
@@ -98,6 +98,20 @@ use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
 /// # let pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
 /// let image = pipeline.quantized_rgbimage_par();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Instead of an [`RgbImage`] you can also get an indexed image
+/// (a palette and a list of indices into the palette):
+/// ```no_run
+/// # use quantette::{ImagePipeline, AboveMaxLen};
+/// # use palette::Srgb;
+/// # fn main() -> Result<(), AboveMaxLen<u32>> {
+/// # let srgb = vec![Srgb::new(0, 0, 0)];
+/// # let pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
+/// let (palette, indices) = pipeline.indexed_palette();
+/// let (palette, indices) = pipeline.indexed_palette_par();
 /// # Ok(())
 /// # }
 /// ```
@@ -254,7 +268,7 @@ impl<'a> ImagePipeline<'a> {
         }
     }
 
-    /// Runs the pipeline and returns the quantized image as an indexed palette.
+    /// Runs the pipeline and returns the quantized image as a list of indices into a palette.
     #[must_use]
     pub fn indexed_palette(&self) -> (Vec<Srgb<u8>>, Vec<u8>) {
         match self.colorspace {
@@ -394,7 +408,8 @@ impl<'a> ImagePipeline<'a> {
         PalettePipeline::from(self.clone()).palette_par()
     }
 
-    /// Runs the pipeline in parallel and returns the quantized image as an indexed palette.
+    /// Runs the pipeline in parallel and returns the quantized image as a
+    /// list of indices into a palette.
     #[must_use]
     pub fn indexed_palette_par(&self) -> (Vec<Srgb<u8>>, Vec<u8>) {
         match self.colorspace {
