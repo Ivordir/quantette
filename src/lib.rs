@@ -19,7 +19,7 @@
 //! If you want a color palette instead of a quantized image, see [`PalettePipeline`] instead.
 //! Both of these have examples in their documentation, but here is an additional example:
 //! ```no_run
-//! # use quantette::{ImagePipeline, AboveMaxLen, ColorSpace, QuantizeMethod, KmeansOptions};
+//! # use quantette::{ImagePipeline, AboveMaxLen, ColorSpace, QuantizeMethod};
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let img = image::open("some image")?.into_rgb8();
 //!

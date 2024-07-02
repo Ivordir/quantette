@@ -47,7 +47,7 @@ use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 ///
 /// Then, you can change different options like the number of colors in the palette:
 /// ```
-/// # use quantette::{ImagePipeline, AboveMaxLen, ColorSpace, QuantizeMethod, KmeansOptions};
+/// # use quantette::{ImagePipeline, AboveMaxLen, ColorSpace, QuantizeMethod};
 /// # use palette::Srgb;
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
@@ -64,7 +64,7 @@ use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 /// so you can check its documentation example for more information.
 /// In addition, [`ImagePipeline`] has options to control the dither behavior:
 /// ```
-/// # use quantette::{ImagePipeline, AboveMaxLen, ColorSpace, QuantizeMethod, KmeansOptions};
+/// # use quantette::{ImagePipeline, AboveMaxLen, ColorSpace, QuantizeMethod};
 /// # use palette::Srgb;
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];

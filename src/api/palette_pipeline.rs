@@ -53,7 +53,7 @@ use {
 ///
 /// Then, you can change the various options:
 /// ```
-/// # use quantette::{PalettePipeline, AboveMaxLen, ColorSpace, QuantizeMethod, KmeansOptions};
+/// # use quantette::{PalettePipeline, AboveMaxLen, ColorSpace, QuantizeMethod};
 /// # use palette::Srgb;
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
@@ -61,7 +61,7 @@ use {
 /// pipeline
 ///     .palette_size(192) // the number of colors in the palette
 ///     .colorspace(ColorSpace::Oklab) // use a more accurate color space (needs the `colorspaces` feature)
-///     .quantize_method(KmeansOptions::new()); // use a more accurate quantization method (needs the `kmeans` feature)
+///     .quantize_method(QuantizeMethod::kmeans()); // use a more accurate quantization method (needs the `kmeans` feature)
 /// # Ok(())
 /// # }
 /// ```
@@ -69,15 +69,15 @@ use {
 /// After changing all the options you want, run the pipeline using
 /// [`palette`](PalettePipeline::palette()):
 /// ```no_run
-/// # use quantette::{PalettePipeline, AboveMaxLen};
+/// # use quantette::{PalettePipeline, AboveMaxLen, ColorSpace, QuantizeMethod};
 /// # use palette::Srgb;
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
-/// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// # let mut pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
 /// let palette = pipeline
 ///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
-///     .quantize_method(KmeansOptions::new())
+///     .quantize_method(QuantizeMethod::kmeans())
 ///     .palette();
 /// # Ok(())
 /// # }
@@ -86,11 +86,11 @@ use {
 /// Or, in parallel across multiple threads using
 /// [`palette_par`](PalettePipeline::palette_par()) (needs the `threads` feature):
 /// ```no_run
-/// # use quantette::{PalettePipeline, AboveMaxLen};
+/// # use quantette::{PalettePipeline, AboveMaxLen, ColorSpace, KmeansOptions};
 /// # use palette::Srgb;
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
-/// # let pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
+/// # let mut pipeline = PalettePipeline::new(srgb.as_slice().try_into()?);
 /// let palette = pipeline
 ///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
