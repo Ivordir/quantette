@@ -50,7 +50,7 @@ use {crate::ColorCountsParallelRemap, rayon::prelude::*};
 
 /// A simple new type wrapper around a `Vec` with the invariant that the length of the
 /// inner `Vec` must not be greater than [`MAX_COLORS`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Centroids<Color>(Vec<Color>);
 
@@ -580,72 +580,72 @@ mod tests {
         let empty_output = QuantizeOutput::default();
 
         let empty_colors = &ColorSlice::new_unchecked(&[]);
-        assert_output_eq(
-            &palette(empty_colors, num_samples, centroids.clone(), seed),
-            &empty_output,
+        assert_eq!(
+            palette(empty_colors, num_samples, centroids.clone(), seed),
+            empty_output,
         );
-        assert_output_eq(
-            &indexed_palette(empty_colors, num_samples, centroids.clone(), seed),
-            &empty_output,
+        assert_eq!(
+            indexed_palette(empty_colors, num_samples, centroids.clone(), seed),
+            empty_output,
         );
         #[cfg(feature = "threads")]
         {
             let batch_size = 64;
 
-            assert_output_eq(
-                &palette_par(
+            assert_eq!(
+                palette_par(
                     empty_colors,
                     num_samples,
                     batch_size,
                     centroids.clone(),
                     seed,
                 ),
-                &empty_output,
+                empty_output,
             );
-            assert_output_eq(
-                &indexed_palette_par(
+            assert_eq!(
+                indexed_palette_par(
                     empty_colors,
                     num_samples,
                     batch_size,
                     centroids.clone(),
                     seed,
                 ),
-                &empty_output,
+                empty_output,
             );
         }
 
         let empty_centroids = Centroids::new_unchecked(Vec::new());
-        assert_output_eq(
-            &palette(colors, num_samples, empty_centroids.clone(), seed),
-            &empty_output,
+        assert_eq!(
+            palette(colors, num_samples, empty_centroids.clone(), seed),
+            empty_output,
         );
-        assert_output_eq(
-            &indexed_palette(colors, num_samples, empty_centroids.clone(), seed),
-            &empty_output,
+        assert_eq!(
+            indexed_palette(colors, num_samples, empty_centroids.clone(), seed),
+            empty_output,
         );
         #[cfg(feature = "threads")]
         {
             let batch_size = 64;
 
-            assert_output_eq(
-                &palette_par(
+            assert_eq!(
+                palette_par(
                     colors,
                     num_samples,
                     batch_size,
                     empty_centroids.clone(),
                     seed,
                 ),
-                &empty_output,
+                empty_output,
             );
-            assert_output_eq(
-                &indexed_palette_par(
+            assert_eq!(
+                indexed_palette_par(
                     colors,
                     num_samples,
                     batch_size,
                     empty_centroids.clone(),
                     seed,
                 ),
-                &empty_output,
+                empty_output,
             );
         }
     }
@@ -664,7 +664,7 @@ mod tests {
             counts: vec![0; centroids.len()],
             indices: Vec::new(),
         };
-        assert_output_eq(&actual, &expected);
+        assert_eq!(actual, expected);
 
         let actual = indexed_palette(colors, num_samples, centroids.clone(), seed);
         assert_eq!(actual.indices.len(), colors.len());
@@ -672,14 +672,14 @@ mod tests {
             indices: actual.indices.clone(),
             ..expected.clone()
         };
-        assert_output_eq(&actual, &expected_indexed);
+        assert_eq!(actual, expected_indexed);
 
         #[cfg(feature = "threads")]
         {
             let num_samples = 0;
             let batch_size = 64;
             let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
             let actual =
                 indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
             assert_eq!(actual.indices.len(), colors.len());
@@ -687,12 +687,12 @@ mod tests {
                 indices: actual.indices.clone(),
                 ..expected.clone()
             };
-            assert_output_eq(&actual, &expected_indexed);
+            assert_eq!(actual, expected_indexed);
 
             let num_samples = 505;
             let batch_size = 0;
             let actual = palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
             let actual =
                 indexed_palette_par(colors, num_samples, batch_size, centroids.clone(), seed);
             assert_eq!(actual.indices.len(), colors.len());
@@ -700,7 +700,7 @@ mod tests {
                 indices: actual.indices.clone(),
                 ..expected.clone()
             };
-            assert_output_eq(&actual, &expected_indexed);
+            assert_eq!(actual, expected_indexed);
         }
     }
 
@@ -733,7 +733,7 @@ mod tests {
             counts: actual.counts.clone(),
             indices: Vec::new(),
         };
-        assert_output_eq(&actual, &expected);
+        assert_eq!(actual, expected);
         assert_eq!(actual.counts.into_iter().sum::<u32>(), num_samples);
 
         let actual = indexed_palette(colors, num_samples, centroids.clone(), seed);
@@ -743,7 +743,7 @@ mod tests {
             counts: actual.counts.clone(),
             indices: indices.clone(),
         };
-        assert_output_eq(&actual, &expected);
+        assert_eq!(actual, expected);
         assert_eq!(actual.counts.into_iter().sum::<u32>(), num_samples);
 
         #[cfg(feature = "threads")]
@@ -757,7 +757,7 @@ mod tests {
                 counts: actual.counts.clone(),
                 indices: Vec::new(),
             };
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
             assert_eq!(
                 actual.counts.into_iter().sum::<u32>(),
                 num_samples - num_samples % batch_size
@@ -771,7 +771,7 @@ mod tests {
                 counts: actual.counts.clone(),
                 indices,
             };
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
             assert_eq!(
                 actual.counts.into_iter().sum::<u32>(),
                 num_samples - num_samples % batch_size

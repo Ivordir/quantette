@@ -53,7 +53,7 @@ impl<T: Debug + Display> Error for AboveMaxLen<T> {}
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct ColorSlice<'a, Color>(&'a [Color]);
 
@@ -232,8 +232,9 @@ impl Display for PaletteSize {
 /// (e.g., [`wu::indexed_palette`](crate::wu::indexed_palette)).
 /// Otherwise, `indices` will be empty (e.g., [`wu::palette`](crate::wu::palette)).
 ///
-/// Note that all fields will be empty if a [`PaletteSize`] of `0` was provided to the quantization function.
-#[derive(Debug, Clone)]
+/// Note that all fields will be empty if a [`PaletteSize`] of `0` was provided to
+/// the quantization function.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuantizeOutput<Color> {
     /// The computed color palette that is representative of the colors in the image.
     ///

@@ -831,18 +831,18 @@ mod tests {
         let binner = UIntBinner::<32>;
 
         let actual = palette(&colors, palette_size, &binner);
-        assert_output_eq(&actual, &expected);
+        assert_eq!(actual, expected);
 
         let actual = indexed_palette(&colors, palette_size, &binner);
-        assert_output_eq(&actual, &expected);
+        assert_eq!(actual, expected);
 
         #[cfg(feature = "threads")]
         {
             let actual = palette_par(&colors, palette_size, &binner);
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
 
             let actual = indexed_palette_par(&colors, palette_size, &binner);
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
         }
     }
 
@@ -941,12 +941,12 @@ mod tests {
             counts: vec![COUNT; expected_palette.len()],
             indices: Vec::new(),
         };
-        assert_output_eq(&actual, &expected);
+        assert_eq!(actual, expected);
         assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
 
         let actual = reorder_output(indexed_palette(colors, palette_size, &binner));
         let expected = QuantizeOutput { indices: indices.clone(), ..expected };
-        assert_output_eq(&actual, &expected);
+        assert_eq!(actual, expected);
         assert_indices_count(&actual);
         assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
 
@@ -962,12 +962,12 @@ mod tests {
                 counts: vec![COUNT; expected_palette.len()],
                 indices: Vec::new(),
             };
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
             assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
 
             let actual = reorder_output(indexed_palette_par(colors, palette_size, &binner));
             let expected = QuantizeOutput { indices, ..expected };
-            assert_output_eq(&actual, &expected);
+            assert_eq!(actual, expected);
             assert_indices_count(&actual);
             assert_eq!(actual.counts.into_iter().sum::<u32>(), colors.num_colors());
         }
@@ -999,12 +999,12 @@ mod tests {
 
         let single = palette(&colors, palette_size, &binner);
         let par = palette_par(&colors, palette_size, &binner);
-        assert_output_eq(&single, &par);
+        assert_eq!(single, par);
         assert_eq!(single.counts.into_iter().sum::<u32>(), colors.num_colors());
 
         let single = indexed_palette(&colors, palette_size, &binner);
         let par = indexed_palette_par(&colors, palette_size, &binner);
-        assert_output_eq(&single, &par);
+        assert_eq!(single, par);
         assert_indices_count(&single);
         assert_eq!(single.counts.into_iter().sum::<u32>(), colors.num_colors());
     }

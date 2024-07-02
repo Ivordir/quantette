@@ -270,7 +270,7 @@ fn prefix_sum<const M: usize>(counts: &mut [u32; M]) {
 /// Deduplicated colors and their frequency counts.
 ///
 /// Currently, only colors that implement [`ColorComponents<u8, 3>`] are supported.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UniqueColorCounts<Color, Component, const N: usize>
 where
     Color: ColorComponents<Component, N>,
@@ -444,7 +444,7 @@ where
 /// to be able to reconstruct a quantized image.
 ///
 /// Currently, only colors that implement [`ColorComponents<u8, 3>`] are supported.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexedColorCounts<Color, Component, const N: usize>
 where
     Color: ColorComponents<Component, N>,
@@ -1149,23 +1149,6 @@ mod tests {
         }
     }
 
-    fn assert_unique_eq(
-        actual: &UniqueColorCounts<Srgb<u8>, u8, 3>,
-        expected: &UniqueColorCounts<Srgb<u8>, u8, 3>,
-    ) {
-        assert_eq!(actual.colors(), expected.colors());
-        assert_eq!(actual.counts(), expected.counts());
-    }
-
-    fn assert_indexed_eq(
-        actual: &IndexedColorCounts<Srgb<u8>, u8, 3>,
-        expected: &IndexedColorCounts<Srgb<u8>, u8, 3>,
-    ) {
-        assert_eq!(actual.colors(), expected.colors());
-        assert_eq!(actual.counts(), expected.counts());
-        assert_eq!(actual.indices(), expected.indices());
-    }
-
     #[test]
     fn empty_input() {
         let empty_input = ColorSlice::<Srgb<u8>>::new_unchecked(&[]);
@@ -1220,11 +1203,12 @@ mod tests {
             let mut unique = UniqueColorCounts::new(without_duplicate, |srgb| srgb);
             let i = index_of(unique.colors(), duplicate);
             unique.counts[i] += 1;
+            unique.total_count += 1;
             unique
         };
         let actual = UniqueColorCounts::new(with_duplicate, |srgb| srgb);
         assert_valid_unique(&actual, with_duplicate);
-        assert_unique_eq(&actual, &expected);
+        assert_eq!(actual, expected);
 
         let expected = {
             let mut indexed = IndexedColorCounts::new(without_duplicate, |srgb| srgb);
@@ -1234,11 +1218,12 @@ mod tests {
             {
                 indexed.indices.push(i as u32);
             }
+            indexed.total_count += 1;
             indexed
         };
         let actual = IndexedColorCounts::new(with_duplicate, |srgb| srgb);
         assert_valid_indexed(&actual, with_duplicate);
-        assert_indexed_eq(&actual, &expected);
+        assert_eq!(actual, expected);
 
         #[cfg(feature = "threads")]
         {
@@ -1246,16 +1231,18 @@ mod tests {
                 let mut unique = UniqueColorCounts::new_par(without_duplicate, |srgb| srgb);
                 let i = index_of(unique.colors(), duplicate);
                 unique.counts[i] += 1;
+                unique.total_count += 1;
                 unique
             };
             let actual = UniqueColorCounts::new_par(with_duplicate, |srgb| srgb);
             assert_valid_unique(&actual, with_duplicate);
-            assert_unique_eq(&actual, &expected);
+            assert_eq!(actual, expected);
 
             let expected = {
                 let mut indexed = IndexedColorCounts::new_par(without_duplicate, |srgb| srgb);
                 let i = index_of(indexed.colors(), duplicate);
                 indexed.counts[i] += 1;
+                indexed.total_count += 1;
                 #[allow(clippy::cast_possible_truncation)]
                 {
                     indexed.indices.push(i as u32);
@@ -1264,7 +1251,7 @@ mod tests {
             };
             let actual = IndexedColorCounts::new_par(with_duplicate, |srgb| srgb);
             assert_valid_indexed(&actual, with_duplicate);
-            assert_indexed_eq(&actual, &expected);
+            assert_eq!(actual, expected);
         }
     }
 
@@ -1290,7 +1277,7 @@ mod tests {
         let expected = UniqueColorCounts::new(colors, |srgb| srgb);
         let actual = UniqueColorCounts::new(reordered, |srgb| srgb);
         assert_valid_unique(&actual, reordered);
-        assert_unique_eq(&actual, &expected);
+        assert_eq!(actual, expected);
 
         let expected = IndexedColorCounts::new(colors, |srgb| srgb);
         let actual = IndexedColorCounts::new(reordered, |srgb| srgb);
@@ -1304,7 +1291,7 @@ mod tests {
             let expected = UniqueColorCounts::new_par(colors, |srgb| srgb);
             let actual = UniqueColorCounts::new_par(reordered, |srgb| srgb);
             assert_valid_unique(&actual, reordered);
-            assert_unique_eq(&actual, &expected);
+            assert_eq!(actual, expected);
 
             let expected = IndexedColorCounts::new_par(colors, |srgb| srgb);
             let actual = IndexedColorCounts::new_par(reordered, |srgb| srgb);
@@ -1332,12 +1319,12 @@ mod tests {
         let single = UniqueColorCounts::new(colors, |srgb| srgb);
         let par = UniqueColorCounts::new_par(colors, |srgb| srgb);
         assert_valid_unique(&single, colors);
-        assert_unique_eq(&single, &par);
+        assert_eq!(single, par);
 
         let single = IndexedColorCounts::new(colors, |srgb| srgb);
         let par = IndexedColorCounts::new_par(colors, |srgb| srgb);
         assert_valid_indexed(&single, colors);
-        assert_indexed_eq(&single, &par);
+        assert_eq!(single, par);
     }
 
     #[test]

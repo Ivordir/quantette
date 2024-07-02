@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 /// A builder struct to specify the parameters for Wu's quantization method.
 ///
 /// No options currently exist, but future options can be specified here.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WuOptions<Color> {
     /// The generic parameter is not currently used, but may in the future.
     pub(crate) _phantom: PhantomData<Color>,
@@ -39,7 +39,7 @@ impl<Color> WuOptions<Color> {
 /// # let options: KmeansOptions<()> = options; // satisfy type inference
 /// ```
 #[cfg(feature = "kmeans")]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct KmeansOptions<Color> {
     /// The proportion of the image or unique colors to sample.
     pub(crate) sampling_factor: f32,
