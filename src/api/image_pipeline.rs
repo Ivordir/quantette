@@ -1,42 +1,36 @@
 //! Contains the [`ImagePipeline`] builder struct for the high level API.
 
-#[cfg(feature = "kmeans")]
-use super::num_samples;
-
+#[cfg(all(feature = "colorspaces", feature = "threads"))]
+use crate::colorspace::convert_color_slice_par;
+#[cfg(feature = "threads")]
+use crate::ColorCountsParallelRemap;
+#[cfg(any(feature = "colorspaces", feature = "kmeans"))]
+use crate::IndexedColorCounts;
 use crate::{
     dither::FloydSteinberg,
     wu::{self, Binner3},
     ColorComponents, ColorCounts, ColorCountsRemap, ColorSlice, ColorSpace, PalettePipeline,
     PaletteSize, QuantizeMethod, SumPromotion, ZeroedIsZero,
 };
-
-#[cfg(all(feature = "colorspaces", feature = "threads"))]
-use crate::colorspace::convert_color_slice_par;
-#[cfg(feature = "colorspaces")]
-use crate::colorspace::{convert_color_slice, from_srgb, to_srgb};
-#[cfg(feature = "image")]
-use crate::AboveMaxLen;
-#[cfg(feature = "threads")]
-use crate::ColorCountsParallelRemap;
-#[cfg(any(feature = "colorspaces", feature = "kmeans"))]
-use crate::IndexedColorCounts;
-#[cfg(feature = "kmeans")]
-use crate::{
-    kmeans::{self, Centroids},
-    KmeansOptions,
-};
-
 use num_traits::AsPrimitive;
 use palette::Srgb;
-
-#[cfg(feature = "image")]
-use image::RgbImage;
-#[cfg(feature = "image")]
-use palette::cast::IntoComponents;
-#[cfg(feature = "colorspaces")]
-use palette::{Lab, Oklab};
 #[cfg(all(feature = "threads", feature = "image"))]
 use rayon::prelude::*;
+#[cfg(feature = "kmeans")]
+use {
+    super::num_samples,
+    crate::{
+        kmeans::{self, Centroids},
+        KmeansOptions,
+    },
+};
+#[cfg(feature = "colorspaces")]
+use {
+    crate::colorspace::{convert_color_slice, from_srgb, to_srgb},
+    palette::{Lab, Oklab},
+};
+#[cfg(feature = "image")]
+use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 
 /// A builder struct to specify options to create a quantized image or an indexed palette from an image.
 ///

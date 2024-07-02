@@ -38,21 +38,15 @@ use crate::{
     AboveMaxLen, ColorComponents, ColorCounts, ColorCountsRemap, PaletteSize, QuantizeOutput,
     MAX_COLORS,
 };
-
-#[cfg(feature = "threads")]
-use crate::ColorCountsParallelRemap;
-
-use std::{array, marker::PhantomData, ops::Deref};
-
 use num_traits::AsPrimitive;
 use palette::cast::{self, AsArrays};
 use rand::{prelude::Distribution, SeedableRng};
 use rand_distr::{weighted_alias::WeightedAliasIndex, Uniform};
 use rand_xoshiro::Xoroshiro128PlusPlus;
+use std::{array, marker::PhantomData, ops::Deref};
 use wide::{f32x8, u32x8, CmpLe};
-
 #[cfg(feature = "threads")]
-use rayon::prelude::*;
+use {crate::ColorCountsParallelRemap, rayon::prelude::*};
 
 /// A simple new type wrapper around a `Vec` with the invariant that the length of the
 /// inner `Vec` must not be greater than [`MAX_COLORS`].
@@ -565,9 +559,7 @@ where
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-
     use crate::{tests::*, ColorSlice};
-
     use ordered_float::OrderedFloat;
     use palette::Srgb;
 

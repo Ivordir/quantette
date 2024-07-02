@@ -1,15 +1,12 @@
 //! Contains dither implementation(s).
 
 use crate::ColorComponents;
-
-use std::array;
-
 use ordered_float::OrderedFloat;
 use palette::cast::AsArrays;
-use wide::{f32x8, u32x8, CmpLe};
-
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
+use std::array;
+use wide::{f32x8, u32x8, CmpLe};
 
 /// Floyd–Steinberg dithering.
 #[derive(Debug, Clone, Copy)]
@@ -610,9 +607,7 @@ fn indices_prev_chunk_last_row(width: usize, chunk_size: usize, indices: &[u8]) 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::tests::*;
-
     use ordered_float::OrderedFloat;
     use palette::Srgb;
 

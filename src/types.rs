@@ -1,17 +1,16 @@
-//! Contains various type needed across the crate.
+//! Contains various types needed across the crate.
 
 use crate::{MAX_COLORS, MAX_PIXELS};
-
 use std::{
     error::Error,
     fmt::{Debug, Display},
     ops::Deref,
 };
-
 #[cfg(feature = "image")]
-use image::RgbImage;
-#[cfg(feature = "image")]
-use palette::{cast::ComponentsAs, Srgb};
+use {
+    image::RgbImage,
+    palette::{cast::ComponentsAs, Srgb},
+};
 
 /// An error type for when the length of an input (e.g., `Vec` or slice)
 /// is above the maximum supported value.

@@ -1,33 +1,31 @@
 //! Contains the [`PalettePipeline`] builder struct for the high level API.
 
-#[cfg(feature = "kmeans")]
-use super::num_samples;
-
+#[cfg(all(feature = "colorspaces", feature = "threads"))]
+use crate::colorspace::convert_color_slice_par;
+#[cfg(any(feature = "colorspaces", feature = "kmeans"))]
+use crate::UniqueColorCounts;
 use crate::{
     wu::{self, Binner3},
     AboveMaxLen, ColorComponents, ColorCounts, ColorSlice, ColorSpace, ImagePipeline, PaletteSize,
     QuantizeMethod, SumPromotion, ZeroedIsZero,
 };
-
-#[cfg(all(feature = "colorspaces", feature = "threads"))]
-use crate::colorspace::convert_color_slice_par;
-#[cfg(feature = "colorspaces")]
-use crate::colorspace::{convert_color_slice, from_srgb, to_srgb};
-#[cfg(any(feature = "colorspaces", feature = "kmeans"))]
-use crate::UniqueColorCounts;
-#[cfg(feature = "kmeans")]
-use crate::{
-    kmeans::{self, Centroids},
-    KmeansOptions,
-};
-
-use num_traits::AsPrimitive;
-use palette::Srgb;
-
 #[cfg(feature = "image")]
 use image::RgbImage;
+use num_traits::AsPrimitive;
+use palette::Srgb;
+#[cfg(feature = "kmeans")]
+use {
+    super::num_samples,
+    crate::{
+        kmeans::{self, Centroids},
+        KmeansOptions,
+    },
+};
 #[cfg(feature = "colorspaces")]
-use palette::{Lab, Oklab};
+use {
+    crate::colorspace::{convert_color_slice, from_srgb, to_srgb},
+    palette::{Lab, Oklab},
+};
 
 /// A builder struct to specify options to create a color palette for an image or slice of colors.
 ///

@@ -1,21 +1,13 @@
 //! Contains the code for color/pixel deduplication and associated traits and types.
 
 use crate::{ColorComponents, ColorSlice, ZeroedIsZero};
-
-#[cfg(feature = "image")]
-use crate::AboveMaxLen;
-
-use std::{marker::PhantomData, ops::Range};
-
 use bitvec::vec::BitVec;
 use palette::cast::{self, AsArrays};
-
-#[cfg(feature = "image")]
-use image::RgbImage;
-#[cfg(feature = "image")]
-use palette::Srgb;
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
+use std::{marker::PhantomData, ops::Range};
+#[cfg(feature = "image")]
+use {crate::AboveMaxLen, image::RgbImage, palette::Srgb};
 
 /// A generalization trait over regular [`ColorSlice`]s and deduplicated pixels like [`UniqueColorCounts`].
 pub trait ColorCounts<Color, Component, const N: usize>
@@ -1120,9 +1112,7 @@ where
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-
     use crate::tests::*;
-
     use palette::Srgb;
     use rand::{seq::SliceRandom, SeedableRng};
     use rand_xoshiro::Xoroshiro128PlusPlus;

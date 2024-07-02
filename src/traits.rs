@@ -1,9 +1,8 @@
 //! Contains various traits needed across the crate.
 
-use std::alloc;
-
 use num_traits::{AsPrimitive, NumAssignOps, NumOps, Zero};
 use palette::cast::ArrayCast;
+use std::alloc;
 
 /// Types that may be cast to and from a fixed sized array.
 ///

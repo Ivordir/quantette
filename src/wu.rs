@@ -19,22 +19,17 @@ use crate::{
     ColorComponents, ColorCounts, ColorCountsRemap, PaletteSize, QuantizeOutput, SumPromotion,
     ZeroedIsZero,
 };
-
+use num_traits::{AsPrimitive, Float, Zero};
+use ordered_float::OrderedFloat;
+use palette::cast;
 use std::{
     array,
     collections::BinaryHeap,
     marker::PhantomData,
     ops::{Add, AddAssign, Index, IndexMut, Sub},
 };
-
-use num_traits::{AsPrimitive, Float, Zero};
-use ordered_float::OrderedFloat;
-use palette::cast;
-
 #[cfg(feature = "threads")]
-use crate::ColorCountsParallelRemap;
-#[cfg(feature = "threads")]
-use rayon::prelude::*;
+use {crate::ColorCountsParallelRemap, rayon::prelude::*};
 
 /// The number of components in the color types. Only 3 components are supported for now.
 const N: usize = 3;
@@ -815,11 +810,9 @@ where
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use palette::Srgb;
-
     use super::*;
-
     use crate::{tests::*, ColorSlice};
+    use palette::Srgb;
 
     fn assert_indices_count(output: &QuantizeOutput<Srgb<u8>>) {
         let mut counts = vec![0; output.palette.len()];

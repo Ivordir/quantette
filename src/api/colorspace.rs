@@ -1,16 +1,15 @@
 //! Contains the supported color spaces and utility functions for converting between them.
 
 use crate::wu::{Binner3, UIntBinner};
-
 #[cfg(all(feature = "kmeans", feature = "colorspaces"))]
 use crate::{kmeans::Centroids, KmeansOptions};
-#[cfg(feature = "colorspaces")]
-use crate::{wu::FloatBinner, ColorSlice, QuantizeMethod, WuOptions};
-
-#[cfg(feature = "colorspaces")]
-use ::palette::{IntoColor, LinSrgb, Srgb};
 #[cfg(all(feature = "threads", feature = "colorspaces"))]
 use rayon::prelude::*;
+#[cfg(feature = "colorspaces")]
+use {
+    crate::{wu::FloatBinner, ColorSlice, QuantizeMethod, WuOptions},
+    ::palette::{IntoColor, LinSrgb, Srgb},
+};
 
 /// The set of supported color spaces that can be used when performing color quantization.
 ///
