@@ -125,7 +125,7 @@ pub struct PalettePipeline<'a> {
     /// The color space to perform color quantization in.
     pub(crate) colorspace: ColorSpace,
     /// The color quantization method to use.
-    pub(crate) quantize_method: QuantizeMethod<Srgb<u8>>,
+    pub(crate) quantize_method: QuantizeMethod,
     /// Whether or not to deduplicate the input pixels/colors.
     #[cfg(any(feature = "kmeans", feature = "colorspaces"))]
     pub(crate) dedup_pixels: bool,
@@ -169,7 +169,7 @@ impl<'a> PalettePipeline<'a> {
     ///
     /// The default quantization method is [`QuantizeMethod::Wu`].
     #[cfg(feature = "kmeans")]
-    pub fn quantize_method(mut self, quantize_method: impl Into<QuantizeMethod<Srgb<u8>>>) -> Self {
+    pub fn quantize_method(mut self, quantize_method: impl Into<QuantizeMethod>) -> Self {
         self.quantize_method = quantize_method.into();
         self
     }
@@ -290,8 +290,6 @@ impl<'a> PalettePipeline<'a> {
             colors, k, quantize_method, dedup_pixels, ..
         } = self;
 
-        let quantize_method = quantize_method.convert_color_space_from_srgb(&convert_to);
-
         let palette = if dedup_pixels {
             let color_counts = UniqueColorCounts::new(colors, convert_to);
             palette(&color_counts, k, quantize_method, binner)
@@ -367,8 +365,6 @@ impl<'a> PalettePipeline<'a> {
             colors, k, quantize_method, dedup_pixels, ..
         } = self;
 
-        let quantize_method = quantize_method.convert_color_space_from_srgb(&convert_to);
-
         let palette = if dedup_pixels {
             let color_counts = UniqueColorCounts::new_par(colors, convert_to);
             palette_par(&color_counts, k, quantize_method, binner)
@@ -387,7 +383,7 @@ impl<'a> PalettePipeline<'a> {
 fn palette<Color, Component, const B: usize>(
     color_counts: &impl ColorCounts<Color, Component, 3>,
     k: PaletteSize,
-    method: QuantizeMethod<Color>,
+    method: QuantizeMethod,
     binner: &impl Binner3<Component, B>,
 ) -> Vec<Color>
 where
@@ -400,12 +396,9 @@ where
     match method {
         QuantizeMethod::Wu(_) => wu::palette(color_counts, k, binner).palette,
         #[cfg(feature = "kmeans")]
-        QuantizeMethod::Kmeans(KmeansOptions {
-            sampling_factor, initial_centroids, seed, ..
-        }) => {
-            let initial_centroids = initial_centroids.unwrap_or_else(|| {
-                Centroids::new_unchecked(wu::palette(color_counts, k, binner).palette)
-            });
+        QuantizeMethod::Kmeans(KmeansOptions { sampling_factor, seed, .. }) => {
+            let initial_centroids =
+                Centroids::new_unchecked(wu::palette(color_counts, k, binner).palette);
             let num_samples = num_samples(sampling_factor, color_counts);
             kmeans::palette(color_counts, num_samples, initial_centroids, seed).palette
         }
@@ -418,7 +411,7 @@ where
 fn palette_par<Color, Component, const B: usize>(
     color_counts: &(impl ColorCounts<Color, Component, 3> + Send + Sync),
     k: PaletteSize,
-    method: QuantizeMethod<Color>,
+    method: QuantizeMethod,
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> Vec<Color>
 where
@@ -431,15 +424,9 @@ where
     match method {
         QuantizeMethod::Wu(_) => wu::palette_par(color_counts, k, binner).palette,
         #[cfg(feature = "kmeans")]
-        QuantizeMethod::Kmeans(KmeansOptions {
-            sampling_factor,
-            initial_centroids,
-            seed,
-            batch_size,
-        }) => {
-            let initial_centroids = initial_centroids.unwrap_or_else(|| {
-                Centroids::new_unchecked(wu::palette_par(color_counts, k, binner).palette)
-            });
+        QuantizeMethod::Kmeans(KmeansOptions { sampling_factor, seed, batch_size }) => {
+            let initial_centroids =
+                Centroids::new_unchecked(wu::palette_par(color_counts, k, binner).palette);
             let num_samples = num_samples(sampling_factor, color_counts);
             kmeans::palette_par(
                 color_counts,

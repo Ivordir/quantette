@@ -1,13 +1,11 @@
 //! Contains the supported color spaces and utility functions for converting between them.
 
 use crate::wu::{Binner3, UIntBinner};
-#[cfg(all(feature = "kmeans", feature = "colorspaces"))]
-use crate::{kmeans::Centroids, KmeansOptions};
 #[cfg(all(feature = "threads", feature = "colorspaces"))]
 use rayon::prelude::*;
 #[cfg(feature = "colorspaces")]
 use {
-    crate::{wu::FloatBinner, ColorSlice, QuantizeMethod, WuOptions},
+    crate::{wu::FloatBinner, ColorSlice},
     ::palette::{IntoColor, LinSrgb, Srgb},
 };
 
@@ -140,34 +138,4 @@ where
     ToColor: Copy + Send,
 {
     colors.par_iter().copied().map(convert).collect()
-}
-
-#[cfg(feature = "colorspaces")]
-impl QuantizeMethod<Srgb<u8>> {
-    /// Converts to a different colorspace.
-    #[allow(unused_variables)]
-    pub(crate) fn convert_color_space_from_srgb<Color>(
-        self,
-        convert_to: impl Fn(Srgb<u8>) -> Color,
-    ) -> QuantizeMethod<Color> {
-        match self {
-            QuantizeMethod::Wu(_) => QuantizeMethod::Wu(WuOptions::new()),
-            #[cfg(feature = "kmeans")]
-            QuantizeMethod::Kmeans(KmeansOptions {
-                sampling_factor,
-                initial_centroids,
-                seed,
-                #[cfg(feature = "threads")]
-                batch_size,
-            }) => QuantizeMethod::Kmeans(KmeansOptions {
-                initial_centroids: initial_centroids.map(|c| {
-                    Centroids::new_unchecked(c.into_inner().into_iter().map(&convert_to).collect())
-                }),
-                sampling_factor,
-                seed,
-                #[cfg(feature = "threads")]
-                batch_size,
-            }),
-        }
-    }
 }

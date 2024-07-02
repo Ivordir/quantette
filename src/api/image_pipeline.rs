@@ -113,7 +113,7 @@ pub struct ImagePipeline<'a> {
     /// The color space to perform color quantization in.
     pub(crate) colorspace: ColorSpace,
     /// The color quantization method to use.
-    pub(crate) quantize_method: QuantizeMethod<Srgb<u8>>,
+    pub(crate) quantize_method: QuantizeMethod,
     /// Whether or not to perform dithering on the image.
     pub(crate) dither: bool,
     /// The error diffusion factor to use when dithering.
@@ -176,7 +176,7 @@ impl<'a> ImagePipeline<'a> {
     ///
     /// The default quantization method is [`QuantizeMethod::Wu`].
     #[cfg(feature = "kmeans")]
-    pub fn quantize_method(mut self, quantize_method: impl Into<QuantizeMethod<Srgb<u8>>>) -> Self {
+    pub fn quantize_method(mut self, quantize_method: impl Into<QuantizeMethod>) -> Self {
         self.quantize_method = quantize_method.into();
         self
     }
@@ -339,7 +339,6 @@ impl<'a> ImagePipeline<'a> {
         } = self;
 
         let (width, height) = dimensions;
-        let quantize_method = quantize_method.convert_color_space_from_srgb(&convert_to);
 
         let (palette, indices) = if dedup_pixels {
             let color_counts = IndexedColorCounts::new(colors, convert_to);
@@ -481,7 +480,6 @@ impl<'a> ImagePipeline<'a> {
         } = self;
 
         let (width, height) = dimensions;
-        let quantize_method = quantize_method.convert_color_space_from_srgb(&convert_to);
 
         let (palette, indices) = if dedup_pixels {
             let color_counts = IndexedColorCounts::new_par(colors, convert_to);
@@ -536,7 +534,7 @@ fn indexed_palette<Color, Component, const B: usize>(
     width: u32,
     height: u32,
     k: PaletteSize,
-    method: QuantizeMethod<Color>,
+    method: QuantizeMethod,
     ditherer: Option<FloydSteinberg>,
     binner: &impl Binner3<Component, B>,
 ) -> (Vec<Color>, Vec<u8>)
@@ -553,12 +551,9 @@ where
             (res.palette, res.indices)
         }
         #[cfg(feature = "kmeans")]
-        QuantizeMethod::Kmeans(KmeansOptions {
-            sampling_factor, initial_centroids, seed, ..
-        }) => {
-            let initial_centroids = initial_centroids.unwrap_or_else(|| {
-                Centroids::new_unchecked(wu::palette(color_counts, k, binner).palette)
-            });
+        QuantizeMethod::Kmeans(KmeansOptions { sampling_factor, seed, .. }) => {
+            let initial_centroids =
+                Centroids::new_unchecked(wu::palette(color_counts, k, binner).palette);
             let num_samples = num_samples(sampling_factor, color_counts);
             let res = kmeans::indexed_palette(color_counts, num_samples, initial_centroids, seed);
             (res.palette, res.indices)
@@ -591,7 +586,7 @@ fn indexed_palette_par<Color, Component, const B: usize>(
     width: u32,
     height: u32,
     k: PaletteSize,
-    method: QuantizeMethod<Color>,
+    method: QuantizeMethod,
     ditherer: Option<FloydSteinberg>,
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> (Vec<Color>, Vec<u8>)
@@ -608,15 +603,9 @@ where
             (res.palette, res.indices)
         }
         #[cfg(feature = "kmeans")]
-        QuantizeMethod::Kmeans(KmeansOptions {
-            sampling_factor,
-            initial_centroids,
-            seed,
-            batch_size,
-        }) => {
-            let initial_centroids = initial_centroids.unwrap_or_else(|| {
-                Centroids::new_unchecked(wu::palette_par(color_counts, k, binner).palette)
-            });
+        QuantizeMethod::Kmeans(KmeansOptions { sampling_factor, seed, batch_size }) => {
+            let initial_centroids =
+                Centroids::new_unchecked(wu::palette_par(color_counts, k, binner).palette);
             let num_samples = num_samples(sampling_factor, color_counts);
             let res = kmeans::indexed_palette_par(
                 color_counts,

@@ -1,30 +1,22 @@
 //! Contains the builder structs for the supported quantization methods.
 
-#[cfg(feature = "kmeans")]
-use crate::kmeans::Centroids;
-
-use std::marker::PhantomData;
-
 /// A builder struct to specify the parameters for Wu's quantization method.
 ///
 /// No options currently exist, but future options can be specified here.
 #[derive(Debug, Clone, PartialEq)]
-pub struct WuOptions<Color> {
-    /// The generic parameter is not currently used, but may in the future.
-    pub(crate) _phantom: PhantomData<Color>,
-}
+pub struct WuOptions {}
 
-impl<Color> Default for WuOptions<Color> {
+impl Default for WuOptions {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<Color> WuOptions<Color> {
+impl WuOptions {
     /// Creates a new [`WuOptions`] with default values.
     #[must_use]
     pub const fn new() -> Self {
-        Self { _phantom: PhantomData }
+        Self {}
     }
 }
 
@@ -36,15 +28,12 @@ impl<Color> WuOptions<Color> {
 /// let options = KmeansOptions::new()
 ///     .sampling_factor(0.25)
 ///     .seed(42);
-/// # let options: KmeansOptions<()> = options; // satisfy type inference
 /// ```
 #[cfg(feature = "kmeans")]
 #[derive(Debug, Clone, PartialEq)]
-pub struct KmeansOptions<Color> {
+pub struct KmeansOptions {
     /// The proportion of the image or unique colors to sample.
     pub(crate) sampling_factor: f32,
-    /// The initial colors/centroids to use.
-    pub(crate) initial_centroids: Option<Centroids<Color>>,
     /// The seed value for the random number generator.
     pub(crate) seed: u64,
     /// The batch size for minibatch k-means.
@@ -53,20 +42,19 @@ pub struct KmeansOptions<Color> {
 }
 
 #[cfg(feature = "kmeans")]
-impl<Color> Default for KmeansOptions<Color> {
+impl Default for KmeansOptions {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[cfg(feature = "kmeans")]
-impl<Color> KmeansOptions<Color> {
+impl KmeansOptions {
     /// Creates a new [`KmeansOptions`] with default values.
     #[must_use]
     pub const fn new() -> Self {
         Self {
             sampling_factor: 0.5,
-            initial_centroids: None,
             seed: 0,
             #[cfg(feature = "threads")]
             batch_size: 4096,
@@ -81,16 +69,6 @@ impl<Color> KmeansOptions<Color> {
     #[must_use]
     pub fn sampling_factor(mut self, sampling_factor: f32) -> Self {
         self.sampling_factor = sampling_factor;
-        self
-    }
-
-    /// Sets the initial colors/centroids for the k-means algorithm.
-    ///
-    /// By default, these are computed through Wu's quantiztion algorithm
-    /// (see the [`wu`](crate::wu) module).
-    #[must_use]
-    pub fn initial_centroids(mut self, centroids: Centroids<Color>) -> Self {
-        self.initial_centroids = Some(centroids);
         self
     }
 
@@ -126,13 +104,13 @@ impl<Color> KmeansOptions<Color> {
 ///
 /// See the descriptions on each enum variant for more information.
 #[derive(Debug, Clone)]
-pub enum QuantizeMethod<Color> {
+pub enum QuantizeMethod {
     /// Wu's color quantizer (Greedy Orthogonal Bipartitioning).
     ///
     /// This method is quick and gives good or at least decent results.
     ///
     /// See the [`wu`](crate::wu) module for more details.
-    Wu(WuOptions<Color>),
+    Wu(WuOptions),
     /// Color quantization using k-means clustering.
     ///
     /// This method is slower than Wu's color quantizer but gives more accurate results.
@@ -144,10 +122,10 @@ pub enum QuantizeMethod<Color> {
     ///
     /// See the [`kmeans`](crate::kmeans) module for more details.
     #[cfg(feature = "kmeans")]
-    Kmeans(KmeansOptions<Color>),
+    Kmeans(KmeansOptions),
 }
 
-impl<Color> QuantizeMethod<Color> {
+impl QuantizeMethod {
     /// Creates a new [`QuantizeMethod::Wu`] with the default [`WuOptions`].
     #[must_use]
     pub const fn wu() -> Self {
@@ -162,15 +140,15 @@ impl<Color> QuantizeMethod<Color> {
     }
 }
 
-impl<Color> From<WuOptions<Color>> for QuantizeMethod<Color> {
-    fn from(options: WuOptions<Color>) -> Self {
+impl From<WuOptions> for QuantizeMethod {
+    fn from(options: WuOptions) -> Self {
         Self::Wu(options)
     }
 }
 
 #[cfg(feature = "kmeans")]
-impl<Color> From<KmeansOptions<Color>> for QuantizeMethod<Color> {
-    fn from(options: KmeansOptions<Color>) -> Self {
+impl From<KmeansOptions> for QuantizeMethod {
+    fn from(options: KmeansOptions) -> Self {
         Self::Kmeans(options)
     }
 }
