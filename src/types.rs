@@ -81,7 +81,7 @@ impl<'a, Color> ColorSlice<'a, Color> {
     /// Returns the length of the slice as a `u32`.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn num_colors(&self) -> u32 {
+    pub const fn num_colors(&self) -> u32 {
         self.0.len() as u32
     }
 }
@@ -182,8 +182,12 @@ impl PaletteSize {
 
     /// Creates a [`PaletteSize`] by clamping the given `u16` to be less than or equal to [`MAX_COLORS`].
     #[must_use]
-    pub fn from_clamped(value: u16) -> Self {
-        Self(u16::min(value, MAX_COLORS))
+    pub const fn from_clamped(value: u16) -> Self {
+        if value <= MAX_COLORS {
+            Self(value)
+        } else {
+            Self(MAX_COLORS)
+        }
     }
 }
 

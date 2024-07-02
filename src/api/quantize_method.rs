@@ -67,7 +67,7 @@ impl KmeansOptions {
     ///
     /// Negative or `NAN` sampling factors will cause k-means to not be run.
     #[must_use]
-    pub fn sampling_factor(mut self, sampling_factor: f32) -> Self {
+    pub const fn sampling_factor(mut self, sampling_factor: f32) -> Self {
         self.sampling_factor = sampling_factor;
         self
     }
@@ -76,7 +76,7 @@ impl KmeansOptions {
     ///
     /// The default seed is `0`.
     #[must_use]
-    pub fn seed(mut self, seed: u64) -> Self {
+    pub const fn seed(mut self, seed: u64) -> Self {
         self.seed = seed;
         self
     }
@@ -91,7 +91,7 @@ impl KmeansOptions {
     /// The default batch size is `4096`.
     #[must_use]
     #[cfg(feature = "threads")]
-    pub fn batch_size(mut self, batch_size: u32) -> Self {
+    pub const fn batch_size(mut self, batch_size: u32) -> Self {
         self.batch_size = batch_size;
         self
     }
