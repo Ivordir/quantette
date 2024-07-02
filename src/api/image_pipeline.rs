@@ -51,7 +51,7 @@ use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 /// # use palette::Srgb;
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
-/// # let pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
+/// # let mut pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
 /// let pipeline = pipeline
 ///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
@@ -68,7 +68,7 @@ use {crate::AboveMaxLen, image::RgbImage, palette::cast::IntoComponents};
 /// # use palette::Srgb;
 /// # fn main() -> Result<(), AboveMaxLen<u32>> {
 /// # let srgb = vec![Srgb::new(0, 0, 0)];
-/// # let pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
+/// # let mut pipeline = ImagePipeline::new(srgb.as_slice().try_into()?, 1, 1).unwrap();
 /// let pipeline = pipeline
 ///     .palette_size(192)
 ///     .colorspace(ColorSpace::Oklab)
@@ -154,7 +154,7 @@ impl<'a> ImagePipeline<'a> {
     /// Sets the palette size which determines the (maximum) number of colors to have in the palette.
     ///
     /// The default palette size is [`PaletteSize::MAX`].
-    pub fn palette_size(mut self, size: impl Into<PaletteSize>) -> Self {
+    pub fn palette_size(&mut self, size: impl Into<PaletteSize>) -> &mut Self {
         self.k = size.into();
         self
     }
@@ -165,7 +165,7 @@ impl<'a> ImagePipeline<'a> {
     ///
     /// The default color space is [`ColorSpace::Srgb`].
     #[cfg(feature = "colorspaces")]
-    pub fn colorspace(mut self, colorspace: ColorSpace) -> Self {
+    pub fn colorspace(&mut self, colorspace: ColorSpace) -> &mut Self {
         self.colorspace = colorspace;
         self
     }
@@ -176,7 +176,7 @@ impl<'a> ImagePipeline<'a> {
     ///
     /// The default quantization method is [`QuantizeMethod::Wu`].
     #[cfg(feature = "kmeans")]
-    pub fn quantize_method(mut self, quantize_method: impl Into<QuantizeMethod>) -> Self {
+    pub fn quantize_method(&mut self, quantize_method: impl Into<QuantizeMethod>) -> &mut Self {
         self.quantize_method = quantize_method.into();
         self
     }
@@ -191,7 +191,7 @@ impl<'a> ImagePipeline<'a> {
     ///
     /// The default value is `true`.
     #[cfg(any(feature = "colorspaces", feature = "kmeans"))]
-    pub fn dedup_pixels(mut self, dedup_pixels: bool) -> Self {
+    pub fn dedup_pixels(&mut self, dedup_pixels: bool) -> &mut Self {
         self.dedup_pixels = dedup_pixels;
         self
     }
@@ -203,7 +203,7 @@ impl<'a> ImagePipeline<'a> {
     /// [`ImagePipeline::dither_error_diffusion`].
     ///
     /// The default value is `true`.
-    pub fn dither(mut self, dither: bool) -> Self {
+    pub fn dither(&mut self, dither: bool) -> &mut Self {
         self.dither = dither;
         self
     }
@@ -216,7 +216,7 @@ impl<'a> ImagePipeline<'a> {
     /// otherwise the default error diffusion will be used as a fallback.
     ///
     /// The default value is [`FloydSteinberg::DEFAULT_ERROR_DIFFUSION`].
-    pub fn dither_error_diffusion(mut self, diffusion: f32) -> Self {
+    pub fn dither_error_diffusion(&mut self, diffusion: f32) -> &mut Self {
         self.dither_error_diffusion = diffusion;
         self
     }
@@ -238,8 +238,8 @@ impl<'a> TryFrom<&'a RgbImage> for ImagePipeline<'a> {
 impl<'a> ImagePipeline<'a> {
     /// Runs the pipeline and returns the computed color palette.
     #[must_use]
-    pub fn palette(self) -> Vec<Srgb<u8>> {
-        PalettePipeline::from(self).palette()
+    pub fn palette(&self) -> Vec<Srgb<u8>> {
+        PalettePipeline::from(self.clone()).palette()
     }
 
     /// Creates the ditherer specified by the current options.
@@ -256,7 +256,7 @@ impl<'a> ImagePipeline<'a> {
 
     /// Runs the pipeline and returns the quantized image as an indexed palette.
     #[must_use]
-    pub fn indexed_palette(self) -> (Vec<Srgb<u8>>, Vec<u8>) {
+    pub fn indexed_palette(&self) -> (Vec<Srgb<u8>>, Vec<u8>) {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let ditherer = self.ditherer();
@@ -268,7 +268,7 @@ impl<'a> ImagePipeline<'a> {
                     dedup_pixels,
                     dimensions,
                     ..
-                } = self;
+                } = *self;
 
                 let (width, height) = dimensions;
                 let binner = ColorSpace::default_binner_srgb_u8();
@@ -316,7 +316,7 @@ impl<'a> ImagePipeline<'a> {
     /// Computes an indexed palette, converting to a different color space to perform the quantization.
     #[cfg(feature = "colorspaces")]
     fn indexed_palette_convert<Color, Component, const B: usize>(
-        self,
+        &self,
         binner: &impl Binner3<Component, B>,
         convert_to: impl Fn(Srgb<u8>) -> Color,
         convert_back: impl Fn(Color) -> Srgb<u8>,
@@ -336,7 +336,7 @@ impl<'a> ImagePipeline<'a> {
             dedup_pixels,
             dimensions,
             ..
-        } = self;
+        } = *self;
 
         let (width, height) = dimensions;
 
@@ -366,7 +366,7 @@ impl<'a> ImagePipeline<'a> {
 impl<'a> ImagePipeline<'a> {
     /// Runs the pipeline and returns the quantized image.
     #[must_use]
-    pub fn quantized_rgbimage(self) -> RgbImage {
+    pub fn quantized_rgbimage(&self) -> RgbImage {
         let (width, height) = self.dimensions;
         let (palette, indices) = self.indexed_palette();
 
@@ -390,13 +390,13 @@ impl<'a> ImagePipeline<'a> {
 impl<'a> ImagePipeline<'a> {
     /// Runs the pipeline in parallel and returns the computed color palette.
     #[must_use]
-    pub fn palette_par(self) -> Vec<Srgb<u8>> {
-        PalettePipeline::from(self).palette_par()
+    pub fn palette_par(&self) -> Vec<Srgb<u8>> {
+        PalettePipeline::from(self.clone()).palette_par()
     }
 
     /// Runs the pipeline in parallel and returns the quantized image as an indexed palette.
     #[must_use]
-    pub fn indexed_palette_par(self) -> (Vec<Srgb<u8>>, Vec<u8>) {
+    pub fn indexed_palette_par(&self) -> (Vec<Srgb<u8>>, Vec<u8>) {
         match self.colorspace {
             ColorSpace::Srgb => {
                 let ditherer = self.ditherer();
@@ -408,7 +408,7 @@ impl<'a> ImagePipeline<'a> {
                     dedup_pixels,
                     dimensions,
                     ..
-                } = self;
+                } = *self;
 
                 let (width, height) = dimensions;
                 let binner = ColorSpace::default_binner_srgb_u8();
@@ -457,7 +457,7 @@ impl<'a> ImagePipeline<'a> {
     /// to perform the quantization.
     #[cfg(feature = "colorspaces")]
     fn indexed_palette_convert_par<Color, Component, const B: usize>(
-        self,
+        &self,
         binner: &(impl Binner3<Component, B> + Sync),
         convert_to: impl Fn(Srgb<u8>) -> Color + Send + Sync,
         convert_back: impl Fn(Color) -> Srgb<u8>,
@@ -477,7 +477,7 @@ impl<'a> ImagePipeline<'a> {
             dedup_pixels,
             dimensions,
             ..
-        } = self;
+        } = *self;
 
         let (width, height) = dimensions;
 
@@ -507,7 +507,7 @@ impl<'a> ImagePipeline<'a> {
 impl<'a> ImagePipeline<'a> {
     /// Runs the pipeline in parallel and returns the quantized image.
     #[must_use]
-    pub fn quantized_rgbimage_par(self) -> RgbImage {
+    pub fn quantized_rgbimage_par(&self) -> RgbImage {
         let (width, height) = self.dimensions;
         let (palette, indices) = self.indexed_palette_par();
 

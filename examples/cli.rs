@@ -168,8 +168,8 @@ fn main() {
             };
 
             let colorspace = colorspace.into();
-            let pipeline = ImagePipeline::try_from(&image)
-                .unwrap()
+            let mut pipeline = ImagePipeline::try_from(&image).unwrap();
+            let pipeline = pipeline
                 .quantize_method(method)
                 .colorspace(colorspace)
                 .dither(dither)

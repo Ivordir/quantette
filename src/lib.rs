@@ -23,14 +23,12 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let img = image::open("some image")?.into_rgb8();
 //!
-//! let pipeline = ImagePipeline::try_from(&img)?
+//! let quantized = ImagePipeline::try_from(&img)?
 //!     .palette_size(128) // set the max number of colors in the palette
 //!     .dither(false) // turn dithering off
 //!     .colorspace(ColorSpace::Oklab) // use a more accurate color space
-//!     .quantize_method(QuantizeMethod::kmeans());
-//!
-//! // Run the pipeline in parallel to get a [`RgbImage`]
-//! let quantized = pipeline.quantized_rgbimage_par();
+//!     .quantize_method(QuantizeMethod::kmeans()) // use a more accurate quantization algorithm
+//!     .quantized_rgbimage_par(); // run the pipeline in parallel to get a [`RgbImage`]
 //! # Ok(())
 //! # }
 //! ```

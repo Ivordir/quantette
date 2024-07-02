@@ -3,7 +3,7 @@
 /// A builder struct to specify the parameters for Wu's quantization method.
 ///
 /// No options currently exist, but future options can be specified here.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WuOptions {}
 
 impl Default for WuOptions {
@@ -30,7 +30,7 @@ impl WuOptions {
 ///     .seed(42);
 /// ```
 #[cfg(feature = "kmeans")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KmeansOptions {
     /// The proportion of the image or unique colors to sample.
     pub(crate) sampling_factor: f32,
@@ -103,7 +103,7 @@ impl KmeansOptions {
 /// Otherwise, only Wu's color quantization method is supported.
 ///
 /// See the descriptions on each enum variant for more information.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum QuantizeMethod {
     /// Wu's color quantizer (Greedy Orthogonal Bipartitioning).
     ///
