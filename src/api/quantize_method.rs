@@ -103,7 +103,7 @@ impl KmeansOptions {
 /// Otherwise, only Wu's color quantization method is supported.
 ///
 /// See the descriptions on each enum variant for more information.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum QuantizeMethod {
     /// Wu's color quantizer (Greedy Orthogonal Bipartitioning).
     ///
