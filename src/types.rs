@@ -123,8 +123,10 @@ impl<'a> TryFrom<&'a RgbImage> for ColorSlice<'a, Srgb<u8>> {
     type Error = AboveMaxLen<u32>;
 
     fn try_from(image: &'a RgbImage) -> Result<Self, Self::Error> {
-        if image.pixels().len() <= MAX_PIXELS as usize {
-            Ok(Self(image.components_as()))
+        let pixels = image.pixels().len();
+        if pixels <= MAX_PIXELS as usize {
+            let buf = &image.as_raw()[..(pixels * 3)];
+            Ok(Self(buf.components_as()))
         } else {
             Err(AboveMaxLen(MAX_PIXELS))
         }
