@@ -148,12 +148,14 @@ impl<'a> TryFrom<&'a RgbImage> for ColorSlice<'a, Srgb<u8>> {
 /// ```
 /// # use quantette::PaletteSize;
 /// let size = PaletteSize::from(16);
+/// let size: PaletteSize = 16.into();
 /// ```
 ///
 /// From a `u16`:
 /// ```
 /// # use quantette::{PaletteSize, AboveMaxLen};
 /// # fn main() -> Result<(), AboveMaxLen<u16>> {
+/// let size = PaletteSize::try_from(128u16)?;
 /// let size: PaletteSize = 128u16.try_into()?;
 /// let size = PaletteSize::from_clamped(1024);
 /// # Ok(())
