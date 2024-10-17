@@ -34,7 +34,7 @@ kmeans = ["rand", "rand_distr", "rand_xoshiro"]
 [dependencies]
 bitvec = "1.0.1"
 num-traits = "0.2.16"
-ordered-float = "4.3.0"
+ordered-float = "4.4.0"
 wide = "0.7.12"
 palette = { version = "0.7.5", default-features = false, features = ["std"] }
 image = { version = "0.25.0", default-features = false, optional = true }
