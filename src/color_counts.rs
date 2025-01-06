@@ -39,13 +39,6 @@ where
     /// As such, the length of this slice must also not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
     fn counts(&self) -> Option<&[u32]>;
 
-    /// A slice of indices into the color slice returned by `colors`.
-    /// This is used to retain the original color slice/image after deduplication.
-    ///
-    /// The length of this slice must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS),
-    /// and each index must be valid index into the slice returned by `colors`.
-    fn indices(&self) -> Option<&[u32]>;
-
     /// The slice returned by `colors` casted to a slice of component arrays.
     fn color_components(&self) -> &[[Component; N]] {
         self.colors().as_arrays()
@@ -68,8 +61,7 @@ where
     }
 }
 
-impl<'a, Color, Component, const N: usize> ColorCounts<Color, Component, N>
-    for ColorSlice<'a, Color>
+impl<Color, Component, const N: usize> ColorCounts<Color, Component, N> for ColorSlice<'_, Color>
 where
     Color: ColorComponents<Component, N>,
 {
@@ -82,10 +74,6 @@ where
     }
 
     fn counts(&self) -> Option<&[u32]> {
-        None
-    }
-
-    fn indices(&self) -> Option<&[u32]> {
         None
     }
 
@@ -115,10 +103,6 @@ where
         Some(&self.counts)
     }
 
-    fn indices(&self) -> Option<&[u32]> {
-        None
-    }
-
     fn total_count(&self) -> u32 {
         self.total_count
     }
@@ -137,10 +121,6 @@ where
         Some(&self.counts)
     }
 
-    fn indices(&self) -> Option<&[u32]> {
-        Some(&self.indices)
-    }
-
     fn total_count(&self) -> u32 {
         self.total_count
     }
@@ -148,81 +128,78 @@ where
 
 /// Types that allow reconstructing the original image/color slice from a `Vec` of indices
 /// into a color palette.
-pub trait ColorCountsRemap<Color, Component, const N: usize>:
+pub trait RemappableColorCounts<Color, Component, const N: usize>:
     ColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N>,
 {
-    /// Uses the given `Vec` of indices to create indices for each pixel/color
-    /// in the original image/color slice.
+    /// A slice of indices into the color slice returned by `colors`.
+    /// This is a mapping from pixels to `colors`, and is used to retain
+    /// the original color slice/image after pixel deduplication.
     ///
-    /// The given `Vec` will have the same length as the color slice returned by `colors`.
+    /// For [`ColorSlice`]s, this returns `None`, indicating that the original pixels
+    /// and `colors` are the same.
     ///
-    /// The length of the returned `Vec` must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
-    fn map_indices(&self, indices: Vec<u8>) -> Vec<u8>;
+    /// The length of this slice must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS),
+    /// and each index must be valid index into the slice returned by `colors`.
+    fn indices(&self) -> Option<&[u32]>;
 }
 
-impl<'a, Color, Component, const N: usize> ColorCountsRemap<Color, Component, N>
-    for ColorSlice<'a, Color>
+impl<Color, Component, const N: usize> RemappableColorCounts<Color, Component, N>
+    for ColorSlice<'_, Color>
 where
     Color: ColorComponents<Component, N>,
 {
-    fn map_indices(&self, indices: Vec<u8>) -> Vec<u8> {
-        indices
+    fn indices(&self) -> Option<&[u32]> {
+        None
     }
 }
 
-impl<Color, Component, const N: usize> ColorCountsRemap<Color, Component, N>
+impl<Color, Component, const N: usize> RemappableColorCounts<Color, Component, N>
     for IndexedColorCounts<Color, Component, N>
 where
     Color: ColorComponents<Component, N>,
 {
-    fn map_indices(&self, indices: Vec<u8>) -> Vec<u8> {
-        let indices = indices.as_slice(); // faster for some reason???
-        self.indices.iter().map(|&i| indices[i as usize]).collect()
+    fn indices(&self) -> Option<&[u32]> {
+        Some(&self.indices)
     }
 }
 
-/// Types that allow reconstructing the original image/color slice in parallel
-/// from a `Vec` of indices into a color palette.
-#[cfg(feature = "threads")]
-pub trait ColorCountsParallelRemap<Color, Component, const N: usize>:
-    ColorCounts<Color, Component, N>
+/// Given a mapping from `colors` to palette colors,
+/// returns a mapping from pixels to palette colors.
+pub(crate) fn remap_indices<Color, Component, const N: usize>(
+    color_counts: &impl RemappableColorCounts<Color, Component, N>,
+    palette_indices: Vec<u8>,
+) -> Vec<u8>
 where
     Color: ColorComponents<Component, N>,
 {
-    /// Uses the given `Vec` of indices to create indices, in parallel, for each pixel/color
-    /// in the original image/color slice.
-    ///
-    /// The given `Vec` will have the same length as the color slice returned by `colors`.
-    ///
-    /// The length of the returned `Vec` must not be greater than [`MAX_PIXELS`](crate::MAX_PIXELS).
-    fn map_indices_par(&self, indices: Vec<u8>) -> Vec<u8>;
-}
-
-#[cfg(feature = "threads")]
-impl<'a, Color, Component, const N: usize> ColorCountsParallelRemap<Color, Component, N>
-    for ColorSlice<'a, Color>
-where
-    Color: ColorComponents<Component, N>,
-{
-    fn map_indices_par(&self, indices: Vec<u8>) -> Vec<u8> {
-        indices
+    if let Some(color_indices) = color_counts.indices() {
+        let indices = palette_indices.as_slice(); // faster for some reason???
+        color_indices.iter().map(|&i| indices[i as usize]).collect()
+    } else {
+        palette_indices
     }
 }
 
+/// Given a mapping from `colors` to palette color index,
+/// returns a mapping from pixels to palette color.
 #[cfg(feature = "threads")]
-impl<Color, Component, const N: usize> ColorCountsParallelRemap<Color, Component, N>
-    for IndexedColorCounts<Color, Component, N>
+pub(crate) fn remap_indices_par<Color, Component, const N: usize>(
+    color_counts: &impl RemappableColorCounts<Color, Component, N>,
+    palette_indices: Vec<u8>,
+) -> Vec<u8>
 where
     Color: ColorComponents<Component, N>,
 {
-    fn map_indices_par(&self, indices: Vec<u8>) -> Vec<u8> {
-        let indices = indices.as_slice(); // faster for some reason???
-        self.indices
+    if let Some(color_indices) = color_counts.indices() {
+        let indices = palette_indices.as_slice(); // faster for some reason???
+        color_indices
             .par_iter()
             .map(|&i| indices[i as usize])
             .collect()
+    } else {
+        palette_indices
     }
 }
 
@@ -669,8 +646,8 @@ mod sync_unsafe {
         written: Vec<AtomicBool>,
     }
 
-    unsafe impl<'a, T: Send + Sync> Send for SyncUnsafeSlice<'a, T> {}
-    unsafe impl<'a, T: Send + Sync> Sync for SyncUnsafeSlice<'a, T> {}
+    unsafe impl<T: Send + Sync> Send for SyncUnsafeSlice<'_, T> {}
+    unsafe impl<T: Send + Sync> Sync for SyncUnsafeSlice<'_, T> {}
 
     impl<'a, T> SyncUnsafeSlice<'a, T> {
         /// Creates a new [`SyncUnsafeSlice`] with the given slice.
@@ -701,7 +678,7 @@ mod sync_unsafe {
         }
     }
 
-    impl<'a, T: Copy> SyncUnsafeSlice<'a, T> {
+    impl<T: Copy> SyncUnsafeSlice<'_, T> {
         /// Unsafely write the given slice to the given range.
         ///
         /// # Safety

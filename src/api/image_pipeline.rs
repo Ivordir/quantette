@@ -2,15 +2,13 @@
 
 #[cfg(all(feature = "colorspaces", feature = "threads"))]
 use crate::colorspace::convert_color_slice_par;
-#[cfg(feature = "threads")]
-use crate::ColorCountsParallelRemap;
 #[cfg(any(feature = "colorspaces", feature = "kmeans"))]
 use crate::IndexedColorCounts;
 use crate::{
     dither::FloydSteinberg,
     wu::{self, Binner3},
-    ColorComponents, ColorCounts, ColorCountsRemap, ColorSlice, ColorSpace, PalettePipeline,
-    PaletteSize, QuantizeMethod, SumPromotion, ZeroedIsZero,
+    ColorComponents, ColorCounts, ColorSlice, ColorSpace, PalettePipeline, PaletteSize,
+    QuantizeMethod, RemappableColorCounts, SumPromotion, ZeroedIsZero,
 };
 use num_traits::AsPrimitive;
 use palette::Srgb;
@@ -249,7 +247,7 @@ impl<'a> TryFrom<&'a RgbImage> for ImagePipeline<'a> {
     }
 }
 
-impl<'a> ImagePipeline<'a> {
+impl ImagePipeline<'_> {
     /// Runs the pipeline and returns the computed color palette.
     #[must_use]
     pub fn palette(&self) -> Vec<Srgb<u8>> {
@@ -377,7 +375,7 @@ impl<'a> ImagePipeline<'a> {
 }
 
 #[cfg(feature = "image")]
-impl<'a> ImagePipeline<'a> {
+impl ImagePipeline<'_> {
     /// Runs the pipeline and returns the quantized image.
     #[must_use]
     pub fn quantized_rgbimage(&self) -> RgbImage {
@@ -401,7 +399,7 @@ impl<'a> ImagePipeline<'a> {
 }
 
 #[cfg(feature = "threads")]
-impl<'a> ImagePipeline<'a> {
+impl ImagePipeline<'_> {
     /// Runs the pipeline in parallel and returns the computed color palette.
     #[must_use]
     pub fn palette_par(&self) -> Vec<Srgb<u8>> {
@@ -519,7 +517,7 @@ impl<'a> ImagePipeline<'a> {
 }
 
 #[cfg(all(feature = "threads", feature = "image"))]
-impl<'a> ImagePipeline<'a> {
+impl ImagePipeline<'_> {
     /// Runs the pipeline in parallel and returns the quantized image.
     #[must_use]
     pub fn quantized_rgbimage_par(&self) -> RgbImage {
@@ -545,7 +543,7 @@ impl<'a> ImagePipeline<'a> {
 /// Computes a color palette and the indices into it.
 #[allow(clippy::needless_pass_by_value)]
 fn indexed_palette<Color, Component, const B: usize>(
-    color_counts: &impl ColorCountsRemap<Color, Component, 3>,
+    color_counts: &impl RemappableColorCounts<Color, Component, 3>,
     width: u32,
     height: u32,
     k: PaletteSize,
@@ -597,7 +595,7 @@ where
 #[cfg(feature = "threads")]
 #[allow(clippy::needless_pass_by_value)]
 fn indexed_palette_par<Color, Component, const B: usize>(
-    color_counts: &(impl ColorCountsParallelRemap<Color, Component, 3> + Send + Sync),
+    color_counts: &(impl RemappableColorCounts<Color, Component, 3> + Send + Sync),
     width: u32,
     height: u32,
     k: PaletteSize,

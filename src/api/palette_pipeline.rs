@@ -214,7 +214,7 @@ impl<'a> From<ImagePipeline<'a>> for PalettePipeline<'a> {
     }
 }
 
-impl<'a> PalettePipeline<'a> {
+impl PalettePipeline<'_> {
     /// Runs the pipeline and returns the computed color palette.
     #[must_use]
     pub fn palette(&self) -> Vec<Srgb<u8>> {
@@ -288,7 +288,7 @@ impl<'a> PalettePipeline<'a> {
 }
 
 #[cfg(feature = "threads")]
-impl<'a> PalettePipeline<'a> {
+impl PalettePipeline<'_> {
     /// Runs the pipeline in parallel and returns the computed color palette.
     #[must_use]
     pub fn palette_par(&self) -> Vec<Srgb<u8>> {

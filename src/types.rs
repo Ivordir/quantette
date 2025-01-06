@@ -57,13 +57,13 @@ impl<T: Debug + Display> Error for AboveMaxLen<T> {}
 #[repr(transparent)]
 pub struct ColorSlice<'a, Color>(&'a [Color]);
 
-impl<'a, Color> Clone for ColorSlice<'a, Color> {
+impl<Color> Clone for ColorSlice<'_, Color> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, Color> Copy for ColorSlice<'a, Color> {}
+impl<Color> Copy for ColorSlice<'_, Color> {}
 
 impl<'a, Color> ColorSlice<'a, Color> {
     /// An empty `ColorSlice`.
@@ -89,13 +89,13 @@ impl<'a, Color> ColorSlice<'a, Color> {
     }
 }
 
-impl<'a, Color> AsRef<[Color]> for ColorSlice<'a, Color> {
+impl<Color> AsRef<[Color]> for ColorSlice<'_, Color> {
     fn as_ref(&self) -> &[Color] {
         self
     }
 }
 
-impl<'a, Color> Deref for ColorSlice<'a, Color> {
+impl<Color> Deref for ColorSlice<'_, Color> {
     type Target = [Color];
 
     fn deref(&self) -> &Self::Target {

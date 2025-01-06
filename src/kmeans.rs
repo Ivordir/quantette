@@ -35,8 +35,8 @@
 // Accessed from https://faculty.uca.edu/ecelebi/documents/JRTIP_2020a.pdf
 
 use crate::{
-    AboveMaxLen, ColorComponents, ColorCounts, ColorCountsRemap, PaletteSize, QuantizeOutput,
-    MAX_COLORS,
+    remap_indices, AboveMaxLen, ColorComponents, ColorCounts, PaletteSize, QuantizeOutput,
+    RemappableColorCounts, MAX_COLORS,
 };
 use num_traits::AsPrimitive;
 use palette::cast::{self, AsArrays};
@@ -46,7 +46,7 @@ use rand_xoshiro::Xoroshiro128PlusPlus;
 use std::{array, marker::PhantomData, ops::Deref};
 use wide::{f32x8, u32x8, CmpLe};
 #[cfg(feature = "threads")]
-use {crate::ColorCountsParallelRemap, rayon::prelude::*};
+use {crate::remap_indices_par, rayon::prelude::*};
 
 /// A simple new type wrapper around a `Vec` with the invariant that the length of the
 /// inner `Vec` must not be greater than [`MAX_COLORS`].
@@ -63,8 +63,8 @@ impl<Color> Centroids<Color> {
 
     /// Creates a [`Centroids`] without ensuring that its length
     /// is less than or equal to [`MAX_COLORS`].
-    #[allow(unused)]
-    pub(crate) const fn new_unchecked(centroids: Vec<Color>) -> Self {
+    pub(crate) fn new_unchecked(centroids: Vec<Color>) -> Self {
+        debug_assert!(centroids.len() <= usize::from(MAX_COLORS));
         Self(centroids)
     }
 
@@ -72,7 +72,7 @@ impl<Color> Centroids<Color> {
     #[must_use]
     pub fn from_truncated(mut centroids: Vec<Color>) -> Self {
         centroids.truncate(MAX_COLORS.into());
-        Self(centroids)
+        Self::new_unchecked(centroids)
     }
 
     /// Returns the number of centroids/colors as a `u16`.
@@ -114,7 +114,7 @@ impl<Color> TryFrom<Vec<Color>> for Centroids<Color> {
 
     fn try_from(colors: Vec<Color>) -> Result<Self, Self::Error> {
         if colors.len() <= usize::from(MAX_COLORS) {
-            Ok(Self(colors))
+            Ok(Self::new_unchecked(colors))
         } else {
             Err(AboveMaxLen(MAX_COLORS))
         }
@@ -323,11 +323,11 @@ where
     }
 }
 
-impl<'a, Color, Component, const N: usize, ColorCount> State<'a, Color, Component, N, ColorCount>
+impl<Color, Component, const N: usize, ColorCount> State<'_, Color, Component, N, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static,
-    ColorCount: ColorCountsRemap<Color, Component, N>,
+    ColorCount: RemappableColorCounts<Color, Component, N>,
     f32: AsPrimitive<Component>,
 {
     /// Computes the index of the nearest centroid for each color.
@@ -379,7 +379,7 @@ where
 /// See the [module](crate::kmeans) documentation for more information on the parameters.
 #[must_use]
 pub fn indexed_palette<Color, Component, const N: usize>(
-    color_counts: &impl ColorCountsRemap<Color, Component, N>,
+    color_counts: &impl RemappableColorCounts<Color, Component, N>,
     num_samples: u32,
     initial_centroids: Centroids<Color>,
     seed: u64,
@@ -397,12 +397,12 @@ where
             state.online_kmeans(num_samples, seed);
         }
         let indices = state.indices();
-        state.into_summary(color_counts.map_indices(indices))
+        state.into_summary(remap_indices(color_counts, indices))
     }
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color, Component, const N: usize, ColorCount> State<'a, Color, Component, N, ColorCount>
+impl<Color, Component, const N: usize, ColorCount> State<'_, Color, Component, N, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static + Send + Sync,
@@ -471,11 +471,11 @@ where
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color, Component, const N: usize, ColorCount> State<'a, Color, Component, N, ColorCount>
+impl<Color, Component, const N: usize, ColorCount> State<'_, Color, Component, N, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: Copy + Into<f32> + 'static + Send + Sync,
-    ColorCount: ColorCountsParallelRemap<Color, Component, N>,
+    ColorCount: RemappableColorCounts<Color, Component, N>,
     f32: AsPrimitive<Component>,
 {
     /// Computes the index of the nearest centroid for each color in parallel.
@@ -532,7 +532,7 @@ where
 #[cfg(feature = "threads")]
 #[must_use]
 pub fn indexed_palette_par<Color, Component, const N: usize>(
-    color_counts: &impl ColorCountsParallelRemap<Color, Component, N>,
+    color_counts: &impl RemappableColorCounts<Color, Component, N>,
     num_samples: u32,
     batch_size: u32,
     initial_centroids: Centroids<Color>,
@@ -551,7 +551,7 @@ where
             state.minibatch_kmeans(num_samples, batch_size, seed);
         }
         let indices = state.indices_par();
-        state.into_summary(color_counts.map_indices_par(indices))
+        state.into_summary(remap_indices_par(color_counts, indices))
     }
 }
 

@@ -16,8 +16,8 @@
 // https://doi.org/10.1145/146443.146475
 
 use crate::{
-    ColorComponents, ColorCounts, ColorCountsRemap, PaletteSize, QuantizeOutput, SumPromotion,
-    ZeroedIsZero,
+    remap_indices, ColorComponents, ColorCounts, PaletteSize, QuantizeOutput,
+    RemappableColorCounts, SumPromotion, ZeroedIsZero,
 };
 use num_traits::{AsPrimitive, Float, Zero};
 use ordered_float::OrderedFloat;
@@ -29,7 +29,7 @@ use std::{
     ops::{Add, AddAssign, Index, IndexMut, Sub},
 };
 #[cfg(feature = "threads")]
-use {crate::ColorCountsParallelRemap, rayon::prelude::*};
+use {crate::remap_indices_par, rayon::prelude::*};
 
 /// The number of components in the color types. Only 3 components are supported for now.
 const N: usize = 3;
@@ -535,14 +535,14 @@ where
     }
 }
 
-impl<'a, Color, Component, Binner, const B: usize, ColorCount>
-    Wu3<'a, Color, Component, Binner, B, ColorCount>
+impl<Color, Component, Binner, const B: usize, ColorCount>
+    Wu3<'_, Color, Component, Binner, B, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: SumPromotion<u32>,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64>,
     Binner: Binner3<Component, B>,
-    ColorCount: ColorCountsRemap<Color, Component, N>,
+    ColorCount: RemappableColorCounts<Color, Component, N>,
     u32: Into<Component::Sum>,
 {
     /// Computes the color palette and indices into it.
@@ -556,7 +556,7 @@ where
             .map(|&color| lookup[self.binner.bin(color)])
             .collect();
 
-        let indices = self.color_counts.map_indices(indices);
+        let indices = remap_indices(self.color_counts, indices);
 
         QuantizeOutput { palette, counts, indices }
     }
@@ -621,14 +621,14 @@ where
 }
 
 #[cfg(feature = "threads")]
-impl<'a, Color, Component, Binner, const B: usize, ColorCount>
-    Wu3<'a, Color, Component, Binner, B, ColorCount>
+impl<Color, Component, Binner, const B: usize, ColorCount>
+    Wu3<'_, Color, Component, Binner, B, ColorCount>
 where
     Color: ColorComponents<Component, N>,
     Component: SumPromotion<u32> + Sync,
     Component::Sum: ZeroedIsZero + AsPrimitive<f64> + Send,
     Binner: Binner3<Component, B> + Sync,
-    ColorCount: ColorCountsParallelRemap<Color, Component, N> + Send + Sync,
+    ColorCount: RemappableColorCounts<Color, Component, N> + Send + Sync,
     u32: Into<Component::Sum>,
 {
     /// Computes the color palette and indices into it in parallel.
@@ -642,7 +642,7 @@ where
             .map(|&color| lookup[self.binner.bin(color)])
             .collect();
 
-        let indices = self.color_counts.map_indices_par(indices);
+        let indices = remap_indices_par(self.color_counts, indices);
 
         QuantizeOutput { palette, counts, indices }
     }
@@ -672,7 +672,7 @@ where
 /// with at most `palette_size` entries and using the given `binner`.
 /// The returned [`QuantizeOutput`] will have its `indices` populated.
 pub fn indexed_palette<Color, Component, const B: usize>(
-    color_counts: &impl ColorCountsRemap<Color, Component, N>,
+    color_counts: &impl RemappableColorCounts<Color, Component, N>,
     palette_size: PaletteSize,
     binner: &impl Binner3<Component, B>,
 ) -> QuantizeOutput<Color>
@@ -715,7 +715,7 @@ where
 /// The returned [`QuantizeOutput`] will have its `indices` populated.
 #[cfg(feature = "threads")]
 pub fn indexed_palette_par<Color, Component, const B: usize>(
-    color_counts: &(impl ColorCountsParallelRemap<Color, Component, N> + Send + Sync),
+    color_counts: &(impl RemappableColorCounts<Color, Component, N> + Send + Sync),
     palette_size: PaletteSize,
     binner: &(impl Binner3<Component, B> + Sync),
 ) -> QuantizeOutput<Color>
