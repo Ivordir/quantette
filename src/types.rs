@@ -66,16 +66,19 @@ impl<'a, Color> Clone for ColorSlice<'a, Color> {
 impl<'a, Color> Copy for ColorSlice<'a, Color> {}
 
 impl<'a, Color> ColorSlice<'a, Color> {
+    /// An empty `ColorSlice`.
+    pub const EMPTY: Self = Self::new_unchecked(&[]);
+
     /// Creates a [`ColorSlice`] without ensuring that its length
     /// is less than or equal to [`MAX_PIXELS`].
-    #[allow(unused)]
     pub(crate) const fn new_unchecked(colors: &'a [Color]) -> Self {
+        debug_assert!(colors.len() <= MAX_PIXELS as usize);
         Self(colors)
     }
 
     /// Creates a new [`ColorSlice`] by truncating the input slice to a max length of [`MAX_PIXELS`].
     pub fn from_truncated(colors: &'a [Color]) -> Self {
-        Self(&colors[..colors.len().min(MAX_PIXELS as usize)])
+        Self::new_unchecked(&colors[..colors.len().min(MAX_PIXELS as usize)])
     }
 
     /// Returns the length of the slice as a `u32`.
@@ -111,7 +114,7 @@ impl<'a, Color> TryFrom<&'a [Color]> for ColorSlice<'a, Color> {
 
     fn try_from(slice: &'a [Color]) -> Result<Self, Self::Error> {
         if slice.len() <= MAX_PIXELS as usize {
-            Ok(Self(slice))
+            Ok(Self::new_unchecked(slice))
         } else {
             Err(AboveMaxLen(MAX_PIXELS))
         }
@@ -126,7 +129,7 @@ impl<'a> TryFrom<&'a RgbImage> for ColorSlice<'a, Srgb<u8>> {
         let pixels = image.pixels().len();
         if pixels <= MAX_PIXELS as usize {
             let buf = &image.as_raw()[..(pixels * 3)];
-            Ok(Self(buf.components_as()))
+            Ok(Self::new_unchecked(buf.components_as()))
         } else {
             Err(AboveMaxLen(MAX_PIXELS))
         }
@@ -179,7 +182,6 @@ impl PaletteSize {
 
     /// Creates a [`PaletteSize`] directly from the given `u16`
     /// without ensuring that it is less than or equal to [`MAX_COLORS`].
-    #[allow(unused)]
     pub(crate) const fn new_unchecked(value: u16) -> Self {
         Self(value)
     }
@@ -188,9 +190,9 @@ impl PaletteSize {
     #[must_use]
     pub const fn from_clamped(value: u16) -> Self {
         if value <= MAX_COLORS {
-            Self(value)
+            Self::new_unchecked(value)
         } else {
-            Self(MAX_COLORS)
+            Self::new_unchecked(MAX_COLORS)
         }
     }
 }
@@ -218,7 +220,7 @@ impl TryFrom<u16> for PaletteSize {
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         if value <= MAX_COLORS {
-            Ok(PaletteSize(value))
+            Ok(Self::new_unchecked(value))
         } else {
             Err(AboveMaxLen(MAX_COLORS))
         }
